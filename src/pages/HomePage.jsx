@@ -1,9 +1,11 @@
 import React, {useEffect} from 'react'
 import "../css/HomePage.css"
+import { useNavigate, useLocation } from "react-router-dom";
 
 const HomePage = () => {
+    const navigate = useNavigate();
   useEffect(() => {
-    const container = document.querySelector('.login-container');
+    const container = document.querySelector('.home-container');
     
     const handleMouseMove = (e) => {
       const rect = container.getBoundingClientRect();
@@ -33,22 +35,22 @@ const HomePage = () => {
   }, []);
 
   const handleLogin = () => {
-    console.log('Login clicked');
-    // Example: navigate('/login')
+    console.log('Login clicked');   
+    navigate('/login');
   };
 
   const handleSignIn = () => {
-    console.log('Sign Up clicked');
+    console.log('Sign Up clicked');  
     // Example: navigate('/register')
   };
 
   return (
-    <div className="login-container">
-      <h1 className="login-title">CineMIS AI</h1>
-      <p className="login-subtitle">Find your Movie with us</p>
-      <div className="login-button-container">
-        <button className="login-btn login-btn-login" onClick={handleLogin}>Log In</button>
-        <button className="login-btn login-btn-signin" onClick={handleSignIn}>Sign Up</button>
+    <div className="home-container">
+      <h1 className="home-title">CineMIS AI</h1>
+      <p className="home-subtitle">Find your Movie with us</p>
+      <div className="home-button-container">
+        <button className="home-btn home-btn-login" onClick={handleLogin}>Log In</button>
+        <button className="home-btn home-btn-signin" onClick={handleSignIn}>Sign Up</button>
       </div>
     </div>
   );
