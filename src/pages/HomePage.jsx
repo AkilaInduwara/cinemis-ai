@@ -41,6 +41,7 @@ const HomePage = () => {
 
   const handleSignIn = () => {
     console.log('Sign Up clicked');  
+    navigate('/signup');
     // Example: navigate('/register')
   };
 
