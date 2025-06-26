@@ -11,112 +11,79 @@ body {
     overflow: hidden;
 }
 
-.startpage-hero-container {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0.8));
-}
-
-/* Background image slideshow container */
-.startpage-background-image {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-size: cover;
-    background-position: center;
-    z-index: 0;
-    transition: background-image 1s ease-in-out; /* Smooth transition for image change */
-    filter: blur(2px);
-}
-
-.startpage-background-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        radial-gradient(circle at center, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.6) 90%),
-        linear-gradient(45deg, rgba(0,0,0,0.4) 0%, rgba(20,20,40,0.5) 100%);
-    z-index: 1;
-}
-
+/* StartPage-specific styles */
 .startpage-main-content {
-    position: relative;
-    z-index: 2;
-    text-align: center;
-    color: white;
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;  /* Full viewport height to center everything vertically */
+  
 }
 
 .startpage-logo {
-    font-size: 5rem;
-    font-weight: 900;
-    color: white;
-    margin-bottom: 10px;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-    letter-spacing: 2px;
+  font-size: 5rem;
+  font-weight: 900;
+  color: white;
+  margin-bottom: 10px;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+  letter-spacing: 2px;
 }
 
 .startpage-tagline {
-    font-size: 1.8rem;
-    color: rgba(255,255,255,0.9);
-    margin-bottom: 60px;
-    letter-spacing: 4px;
-    font-weight: 300;
+  font-size: 1.8rem;
+  color: rgba(255,255,255,0.9);
+  margin-bottom: 60px;
+  letter-spacing: 4px;
+  font-weight: 300;
 }
 
 .startpage-button-container {
-    display: flex;
-    gap: 30px;
-    justify-content: center;
+  display: flex;
+  gap: 30px;
+  justify-content: center;
 }
 
 .startpage-btn {
-    padding: 20px 50px;
-    font-size: 1.3rem;
-    font-weight: 600;
-    border: none;
-    border-radius: 50px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-decoration: none;
-    display: inline-block;
-    min-width: 150px;
+  padding: 20px 50px;
+  font-size: 1.3rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-block;
+  min-width: 150px;
 }
 
 .startpage-btn-login {
-    background: rgba(255,255,255,0.15);
-    color: white;
-    border: 2px solid rgba(255,255,255,0.3);
-    backdrop-filter: blur(10px);
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: 2px solid rgba(255,255,255,0.3);
+  backdrop-filter: blur(10px);
 }
 
 .startpage-btn-signin {
-    background: rgba(255,255,255,0.15);
-    color: white;
-    border: 2px solid rgba(255,255,255,0.3);
-    backdrop-filter: blur(10px);
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: 2px solid rgba(255,255,255,0.3);
+  backdrop-filter: blur(10px);
 }
 
 .startpage-btn:hover {
-    background: rgba(255,255,255,0.25);
-    border-color: rgba(255,255,255,0.5);
-    transform: translateY(-2px);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+  background: rgba(255,255,255,0.25);
+  border-color: rgba(255,255,255,0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.3);
 }
 
 @media (max-width: 768px) {
-    .startpage-background-image {
-        display: none;
-    }
-
-    .startpage-logo {
+   .startpage-logo {
         font-size: 3rem;
     }
 

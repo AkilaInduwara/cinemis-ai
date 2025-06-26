@@ -1,13 +1,24 @@
 import React from 'react'
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import "./App.css"
+import MainLayout from './Components/MainLayout';
 import StartPage from './pages/StartPage'
+import LoginPage from './pages/LoginPage';
 
 const App = () => {
   return (
-    <div>
-      <StartPage />
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<MainLayout />}>
+          <Route index element={<StartPage />} />
+          <Route path="login" element={<LoginPage />} />
+          {/* Add other routes here */}
+        </Route>
+      </Routes>
+    </Router>
   )
 }
 
 export default App
+
+
