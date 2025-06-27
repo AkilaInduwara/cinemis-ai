@@ -12,6 +12,10 @@ const StartPage = () => {
     navigate('/login'); // Navigate to the LoginPage
 
   }
+
+  const handleSignUpClick = () => {
+    navigate('/signup'); // Navigate to the SignupPage
+  }
   return (
      <div className="startpage-main-content">
       <h1 className="startpage-logo">CineMIS AI</h1>
@@ -23,7 +27,10 @@ const StartPage = () => {
         >
           Log In
         </button>
-        <button className="startpage-btn startpage-btn-signin">Sign In</button>
+        <button 
+        className="startpage-btn startpage-btn-signin"
+        onClick={handleSignUpClick}
+        >Sign Up</button>
       </div>
     </div>
   )

@@ -1,15 +1,16 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom';
-import '../css/LoginPage.css';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import "../css/LoginPage.css";
+import BackButton from "../Components/BackButton";
 
 const LoginPage = () => {
- const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleLoginClick = () => {
     // Add login logic here
-    navigate('/home'); // Redirect to home page after login
+    navigate("/home"); // Redirect to home page after login
   };
 
   return (
@@ -20,6 +21,8 @@ const LoginPage = () => {
       <div className="loginpage-background-overlay"></div>
 
       <div className="loginpage-main-content">
+        <BackButton />
+
         <h1 className="loginpage-logo">CineMIS AI</h1>
         <p className="loginpage-tagline">Find your Movie with us</p>
 
@@ -44,17 +47,22 @@ const LoginPage = () => {
           </button>
 
           <p className="loginpage-signup">
-            Don’t Have an Account? <span onClick={() => navigate('/signup')}>Sign up</span>
+            Don’t Have an Account?{" "}
+            <span onClick={() => navigate("/signup")}>Sign up</span>
           </p>
 
           <div className="loginpage-social-signin">
-            <button className="loginpage-social-btn">Sign in with Google</button>
-            <button className="loginpage-social-btn">Sign in with Facebook</button>
+            <button className="loginpage-social-btn">
+              Sign in with Google
+            </button>
+            <button className="loginpage-social-btn">
+              Sign in with Facebook
+            </button>
           </div>
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default LoginPage
+export default LoginPage;

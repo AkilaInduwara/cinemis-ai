@@ -11,7 +11,7 @@ body {
   overflow: hidden;
 }
 
-.loginpage-hero-container {
+.signuppage-hero-container {
   position: relative;
   width: 100vw;
   height: 100vh;
@@ -19,7 +19,7 @@ body {
   flex-direction: column;
 }
 
-.loginpage-background-image {
+.signuppage-background-image {
   position: absolute;
   top: 0;
   left: 0;
@@ -32,7 +32,7 @@ body {
   filter: blur(2px);
 }
 
-.loginpage-background-overlay {
+.signuppage-background-overlay {
   position: absolute;
   top: 0;
   left: 0;
@@ -44,7 +44,7 @@ body {
   z-index: 1;
 }
 
-.loginpage-main-content {
+.signuppage-main-content {
   position: relative;
   z-index: 2;
   text-align: center;
@@ -53,33 +53,34 @@ body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  height: 100vh; 
+  height: 100vh;  /* Full viewport height to center everything vertically */
 }
 
-.loginpage-logo {
+.signuppage-logo {
   font-size: 5rem;
   font-weight: 900;
+  color: white;
   margin-bottom: 10px;
   text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
   letter-spacing: 2px;
 }
 
-.loginpage-tagline {
+.signuppage-tagline {
   font-size: 1.8rem;
   color: rgba(255,255,255,0.9);
-  margin-bottom: 40px;
+  margin-bottom: 60px;
   letter-spacing: 4px;
   font-weight: 300;
 }
 
-.loginpage-form-container {
+.signuppage-form-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 20px;
 }
 
-.loginpage-input {
+.signuppage-input {
   padding: 15px 30px;
   font-size: 1.2rem;
   width: 300px;
@@ -91,12 +92,12 @@ body {
   transition: all 0.3s ease;
 }
 
-.loginpage-input:focus {
+.signuppage-input:focus {
   border-color: rgba(255,255,255,0.6);
   outline: none;
 }
 
-.loginpage-btn {
+.signuppage-btn {
   padding: 15px 40px;
   font-size: 1.5rem;
   border: none;
@@ -107,31 +108,31 @@ body {
   transition: all 0.3s ease;
 }
 
-.loginpage-btn:hover {
+.signuppage-btn:hover {
   background: rgba(255,255,255,0.25);
 }
 
-.loginpage-signup {
+.signuppage-signin {
   color: rgba(255,255,255,0.8);
   margin-top: 20px;
 }
 
-.loginpage-signup span {
+.signuppage-signin span {
   color: rgba(255,255,255,1);
   cursor: pointer;
 }
-.loginpage-signup span:hover {
+
+.signuppage-signin span:hover {
   color: rgb(255, 243, 78);
   cursor: pointer;
 }
-
-.loginpage-social-signin {
+.signuppage-social-signin {
   display: flex;
   gap: 20px;
   justify-content: center;
 }
 
-.loginpage-social-btn {
+.signuppage-social-btn {
   padding: 15px 40px;
   font-size: 1.2rem;
   background: rgba(255,255,255,0.15);
@@ -141,28 +142,29 @@ body {
   cursor: pointer;
 }
 
-.loginpage-social-btn:hover {
+.signuppage-social-btn:hover {
   background: rgba(255,255,255,0.25);
 }
 
 @media (max-width: 768px) {
-  .loginpage-logo {
+  .signuppage-logo {
     font-size: 3rem;
   }
 
-  .loginpage-tagline {
+  .signuppage-tagline {
     font-size: 1.3rem;
+    letter-spacing: 2px;
   }
 
-  .loginpage-input {
+  .signuppage-input {
     width: 250px;
   }
 
-  .loginpage-btn {
+  .signuppage-btn {
     width: 250px;
   }
 
-  .loginpage-social-btn {
+  .signuppage-social-btn {
     width: 250px;
   }
 }

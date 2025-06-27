@@ -1,0 +1,22 @@
+.back-button {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: 0.3s ease;
+}
+
+.back-button:hover {
+  color: #ddd;
+}
+
+.back-arrow {
+  font-size: 1.8rem; /* Adjust the size of the arrow */
+}
