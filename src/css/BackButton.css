@@ -13,10 +13,22 @@
   transition: 0.3s ease;
 }
 
+.back-button.disabled {
+  cursor: not-allowed;
+  color: #888; /* Lighter color when disabled */
+}
+
 .back-button:hover {
   color: #ddd;
 }
 
 .back-arrow {
   font-size: 1.8rem; /* Adjust the size of the arrow */
+}
+
+.back-button:disabled {
+  background: none;
+  color: #888; /* Disabled color */
+  border: none;
+  pointer-events: none;
 }
