@@ -2,6 +2,14 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/SignupPage.css";
 import BackButton from "../Components/BackButton";
+import { db } from "../firebase-config";  // Import Firebase config
+import { collection, addDoc } from "firebase/firestore";  // Firestore functions
+import bcrypt from "bcryptjs";
+import { auth } from "../firebase-config";
+import { GoogleAuthProvider, FacebookAuthProvider, signInWithPopup } from "firebase/auth";
+
+const googleProvider = new GoogleAuthProvider();
+const facebookProvider = new FacebookAuthProvider();
 
 const SignupPage = () => {
   const navigate = useNavigate();
@@ -10,12 +18,72 @@ const SignupPage = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const handleSignupClick = () => {
-    // Add signup logic here
+  const handleSignupClick = async () => {
+    // Check if any field is empty
+    if (!name || !email || !password || !confirmPassword) {
+      alert("All fields are required!");
+      return;  // Stop the function if any field is empty
+    }
+    // Validate password
     if (password === confirmPassword) {
-      navigate("/home"); // Redirect to home page after signup
+      try {
+        // Hash the password using bcryptjs
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Add user data to Firestore (with hashed password)
+        await addDoc(collection(db, "users"), {
+          name: name,
+          email: email,
+          password: hashedPassword, // Store the hashed password
+        });
+        alert("Signup successful!");
+
+        // Redirect to home page after signup
+        navigate("/home");
+      } catch (error) {
+        console.error("Error adding document: ", error);
+        alert("Error signing up!");
+      }
     } else {
       alert("Passwords do not match!");
+    }
+  };
+
+  const handleGoogleSignup = async () => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);  // Trigger Google login
+      const user = result.user;
+
+      // Save Google user info to Firestore (without password)
+      await addDoc(collection(db, "users"), {
+        name: user.displayName,
+        email: user.email,
+        password: null, // No password for Google sign-in
+      });
+
+      navigate("/home");
+    } catch (error) {
+      console.error("Error with Google Sign-in: ", error);
+      alert("Google Sign-in failed!");
+    }
+  };
+
+  const handleFacebookSignup = async () => {
+    try {
+      const result = await signInWithPopup(auth, facebookProvider);  // Trigger Facebook login
+      const user = result.user;
+
+      // Save Facebook user info to Firestore (without password)
+      await addDoc(collection(db, "users"), {
+        name: user.displayName,
+        email: user.email,
+        password: null, // No password for Facebook sign-in
+      });
+
+      navigate("/home");
+    } catch (error) {
+      console.error("Error with Facebook Sign-in: ", error);
+      alert("Facebook Sign-in failed!");
     }
   };
 
@@ -70,10 +138,10 @@ const SignupPage = () => {
           </p>
 
           <div className="signuppage-social-signin">
-            <button className="signuppage-social-btn">
+            <button className="signuppage-social-btn" onClick={handleGoogleSignup}>
               Sign up with Google
             </button>
-            <button className="signuppage-social-btn">
+            <button className="signuppage-social-btn" onClick={handleFacebookSignup}>
               Sign up with Facebook
             </button>
           </div>
