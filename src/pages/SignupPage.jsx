@@ -7,6 +7,23 @@ import { collection, addDoc } from "firebase/firestore";  // Firestore functions
 import bcrypt from "bcryptjs";
 import { auth } from "../firebase-config";
 import { GoogleAuthProvider, FacebookAuthProvider, signInWithPopup } from "firebase/auth";
+import { doc, getDoc, updateDoc, setDoc, runTransaction } from "firebase/firestore";
+
+
+const getCurrentUserId = async () => {
+  const counterDocRef = doc(db, "counters", "userIdCounter");
+  const newUid = await runTransaction(db, async (transaction) => {
+    const counterDoc = await transaction.get(counterDocRef);
+    if (!counterDoc.exists()) {
+      transaction.set(counterDocRef, { currentUid: 1 });
+      return 1; // Return the first uid
+    }
+    const currentCounter = counterDoc.data().currentUid;
+    transaction.update(counterDocRef, { currentUid: currentCounter + 1 });
+    return currentCounter + 1; // Return the incremented uid
+  });
+  return newUid;
+};
 
 const googleProvider = new GoogleAuthProvider();
 const facebookProvider = new FacebookAuthProvider();
@@ -19,35 +36,39 @@ const SignupPage = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const handleSignupClick = async () => {
-    // Check if any field is empty
-    if (!name || !email || !password || !confirmPassword) {
-      alert("All fields are required!");
-      return;  // Stop the function if any field is empty
-    }
-    // Validate password
-    if (password === confirmPassword) {
-      try {
-        // Hash the password using bcryptjs
-        const hashedPassword = await bcrypt.hash(password, 10);
+  // Check if any field is empty
+  if (!name || !email || !password || !confirmPassword) {
+    alert("All fields are required!");
+    return;  // Stop the function if any field is empty
+  }
 
-        // Add user data to Firestore (with hashed password)
-        await addDoc(collection(db, "users"), {
-          name: name,
-          email: email,
-          password: hashedPassword, // Store the hashed password
-        });
-        alert("Signup successful!");
+  // Validate password
+  if (password === confirmPassword) {
+    try {
+      // Hash the password using bcryptjs
+      const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Redirect to home page after signup
-        navigate("/home");
-      } catch (error) {
-        console.error("Error adding document: ", error);
-        alert("Error signing up!");
-      }
-    } else {
-      alert("Passwords do not match!");
+      // Get the auto-incremented uid
+      const newUid = await getCurrentUserId();
+
+      // Add user data to Firestore with auto-incremented userId
+      await addDoc(collection(db, "users"), {
+        uid: newUid,  // Add the unique userId
+        name: name,
+        email: email,
+        password: hashedPassword, // Store the hashed password
+      });
+
+      alert("Signup successful!");
+      navigate("/home");  // Redirect to home page after signup
+    } catch (error) {
+      console.error("Error adding document: ", error);
+      alert("Error signing up!");
     }
-  };
+  } else {
+    alert("Passwords do not match!");
+  }
+};
 
   const handleGoogleSignup = async () => {
     try {
