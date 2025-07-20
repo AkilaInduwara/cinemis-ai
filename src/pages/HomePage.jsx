@@ -12,30 +12,34 @@ const HomePage = () => {
   const [videoFile, setVideoFile] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [uploads, setUploads] = useState([]); // Add this line for uploads state
   const navigate = useNavigate();
 
   useEffect(() => {
-  const initializeUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const init = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      console.log("Session:", session);  // ✅ debug
+      console.log("Error:", error);      // ✅ debug
 
-    if (session?.user) {
-      setUser(session.user);
-      fetchUserDetails(session.user.id);
-    }
-
-    supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setUser(session.user);
         fetchUserDetails(session.user.id);
-      } else {
-        setUser(null);
-        setUserDetails(null);
       }
-    });
-  };
 
-  initializeUser();
-}, []);
+      // Re-check session on any auth state change
+      supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          setUser(session.user);
+          fetchUserDetails(session.user.id);
+        } else {
+          setUser(null);
+          setUserDetails(null);
+        }
+      });
+    };
+
+    init();
+  }, []);
 
   const fetchUserDetails = async (userId) => {
     // Early return if user is not set yet
@@ -80,6 +84,17 @@ const HomePage = () => {
     }
   };
 
+  const fetchUploads = async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from("media_uploads")
+      .select("*")
+      .eq("user_id", user.id);
+
+    if (error) console.error("Fetch error:", error);
+    else setUploads(data);
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     alert("You have logged out.");
@@ -122,22 +137,52 @@ const HomePage = () => {
 
     setUploading(true);
 
-    const filePath = `${type}/${user.id}_${Date.now()}.${
-      type === "video" ? "mp4" : "mp3"
-    }`;
-    const { error } = await supabase.storage
+    const ext = file.name.split(".").pop();
+    const filePath = `${type}s/${user.id}/${Date.now()}.${ext}`;
+
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage
       .from(`${type}s`)
       .upload(filePath, file);
 
-    if (error) {
-      console.error(error);
-      alert("Upload failed.");
+    if (uploadError) {
+      console.error(`${type} upload failed:`, uploadError);
+      alert(`${type.toUpperCase()} upload failed.`);
+      setUploading(false);
+      return;
+    }
+
+    // Get public URL
+    const { data: publicData } = supabase
+      .storage
+      .from(`${type}s`)
+      .getPublicUrl(filePath);
+
+    const publicUrl = publicData.publicUrl;
+
+    // Save metadata in DB
+    const { error: dbError } = await supabase.from("media_uploads").insert([
+      {
+        user_id: user.id,
+        file_url: publicUrl,
+        type: type,
+      },
+    ]);
+
+    if (dbError) {
+      console.error("DB insert error:", dbError);
+      alert("Upload succeeded, but DB insert failed.");
     } else {
-      alert(`${type.toUpperCase()} uploaded successfully!`);
+      alert(`${type.toUpperCase()} uploaded and saved to database!`);
     }
 
     setUploading(false);
   };
+
+  // Optionally, fetch uploads when user changes or after upload
+  useEffect(() => {
+    if (user) fetchUploads();
+  }, [user]);
 
   return (
     <div className="homepage-hero-container">

@@ -65,10 +65,15 @@ const handleSignupClick = async () => {
   navigate("/login");
 };
 
-  const handleSocialSignup = async (provider) => {
-    const { error } = await supabase.auth.signInWithOAuth({ provider });
-    if (error) alert(`${provider} sign-in failed!`);
-  };
+const handleSocialSignup = async (provider) => {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: 'http://localhost:5173/home',
+    },
+  });
+  if (error) alert(`${provider} sign-in failed!`);
+};
 
   return (
     <div className="signuppage-hero-container">

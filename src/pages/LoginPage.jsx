@@ -28,7 +28,12 @@ const handleLoginClick = async () => {
 };
 
 const handleSocialLogin = async (provider) => {
-  const { error } = await supabase.auth.signInWithOAuth({ provider });
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: 'http://localhost:5173/home',
+    },
+  });
   if (error) alert(`${provider} sign-in failed!`);
 };
 
