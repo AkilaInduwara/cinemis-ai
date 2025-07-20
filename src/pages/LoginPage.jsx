@@ -9,27 +9,30 @@ const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleLoginClick = async () => {
-    if (!email || !password) {
-      alert("Both fields are required!");
-      return;
-    }
+const handleLoginClick = async () => {
+  console.log("Attempting login with:", email, password);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
 
-    if (error) {
-      alert("Login failed!");
-      console.error(error);
-    } else {
-      alert("Login successful!");
-      navigate("/home");
-    }
-  };
+  if (error) {
+    console.error("Login error:", error.message);
+    alert("Login failed: " + error.message);
+    return;
+  }
 
-  const handleSocialLogin = async (provider) => {
-    const { error } = await supabase.auth.signInWithOAuth({ provider });
-    if (error) alert(`${provider} sign-in failed!`);
-  };
+  console.log("Login success:", data);
+  navigate("/home");
+};
+
+const handleSocialLogin = async (provider) => {
+  const { error } = await supabase.auth.signInWithOAuth({ provider });
+  if (error) alert(`${provider} sign-in failed!`);
+};
+
+  
 
   return (
     <div className="loginpage-hero-container">

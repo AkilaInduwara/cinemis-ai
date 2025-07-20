@@ -19,23 +19,51 @@ const handleSignupClick = async () => {
     return;
   }
 
-  const { data, error } = await supabase.auth.signUp({
+  if (password !== confirmPassword) {
+    alert("Passwords do not match.");
+    return;
+  }
+
+  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
     email,
     password,
   });
 
-  if (error) {
-    console.error("Signup failed:", error.message);
-    alert("Signup failed: " + error.message);
+  if (signUpError) {
+    console.error("Signup failed:", signUpError.message);
+    alert("Signup failed: " + signUpError.message);
     return;
   }
 
+  const user = signUpData?.user;
+  if (user) {
+    const { data: existingUser, error: selectError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    if (!existingUser) {
+      const { error: insertError } = await supabase.from("users").insert([
+        {
+          id: user.id,
+          name: name,
+          email: user.email,
+          created_at: new Date(),
+        },
+      ]);
+
+      if (insertError) {
+        console.error("Insert failed:", insertError.message);
+      }
+    } else {
+      console.log("User already exists.");
+    }
+  }
+
   alert("Signup successful!");
-  navigate("/home");
+  navigate("/login");
 };
-
-
- 
 
   const handleSocialSignup = async (provider) => {
     const { error } = await supabase.auth.signInWithOAuth({ provider });
