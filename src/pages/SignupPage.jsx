@@ -10,37 +10,32 @@ const SignupPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const isValidEmail = (email) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  const handleSignupClick = async () => {
-    if (!name || !email || !password || !confirmPassword) {
-      alert("All fields are required!");
-      return;
-    }
+const handleSignupClick = async () => {
+  if (!isValidEmail(email)) {
+    alert("Please enter a valid email address.");
+    return;
+  }
 
-    if (password !== confirmPassword) {
-      alert("Passwords do not match!");
-      return;
-    }
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+  });
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { name },
-      },
-    });
+  if (error) {
+    console.error("Signup failed:", error.message);
+    alert("Signup failed: " + error.message);
+    return;
+  }
 
-    if (error) {
-      console.error(error);
-      alert("Signup failed!");
-      return;
-    }
+  alert("Signup successful!");
+  navigate("/home");
+};
 
-    if (data.user) {
-      alert("Signup successful!");
-      navigate("/home");
-    }
-  };
+
+ 
 
   const handleSocialSignup = async (provider) => {
     const { error } = await supabase.auth.signInWithOAuth({ provider });

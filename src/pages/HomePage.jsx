@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import "../css/HomePage.css";
 import BackButton from "../Components/BackButton";
 import { supabase } from "../supabaseClient";
+import dayjs from "dayjs";
 
 const HomePage = () => {
   const [dropdownVisible, setDropdownVisible] = useState(false);
@@ -14,48 +15,56 @@ const HomePage = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+  const initializeUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (session?.user) {
+      setUser(session.user);
+      fetchUserDetails(session.user.id);
+    }
+
+    supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setUser(session.user);
         fetchUserDetails(session.user.id);
+      } else {
+        setUser(null);
+        setUserDetails(null);
       }
-    };
+    });
+  };
 
-    fetchSession();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (session?.user) {
-          setUser(session.user);
-          fetchUserDetails(session.user.id);
-        } else {
-          setUser(null);
-          setUserDetails(null);
-        }
-      }
-    );
-
-    return () => listener?.subscription?.unsubscribe();
-  }, []);
+  initializeUser();
+}, []);
 
   const fetchUserDetails = async (userId) => {
+    // Early return if user is not set yet
+    if (!userId) return;
+
+    // Fetch from your custom users table
     let { data, error } = await supabase
       .from("users")
       .select("*")
       .eq("id", userId)
       .single();
 
-    if (!data && user) {
-      const userMeta = user.user_metadata || {};
-      const name = userMeta.name || "Anonymous";
-      const email = user.email;
+    // If no data found, insert new user
+    if (!data) {
+      const currentUser = await supabase.auth.getUser();
+      const userMeta = currentUser?.data?.user?.user_metadata || {};
+      const name = userMeta?.name || userMeta?.full_name || "Anonymous";
+      const email = currentUser?.data?.user?.email;
 
       const { data: insertData, error: insertError } = await supabase
         .from("users")
-        .insert([{ id: userId, name, email }])
+        .insert([
+          {
+            id: userId,
+            name,
+            email,
+            created_at: dayjs().toISOString(),
+          },
+        ])
         .select()
         .single();
 
