@@ -14,12 +14,19 @@ const HomePage = () => {
   const [uploading, setUploading] = useState(false);
   const [uploads, setUploads] = useState([]); // Add this line for uploads state
   const navigate = useNavigate();
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadType, setUploadType] = useState("");
+  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [selectedAudio, setSelectedAudio] = useState(null);
 
   useEffect(() => {
     const init = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      console.log("Session:", session);  // ✅ debug
-      console.log("Error:", error);      // ✅ debug
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+      console.log("Session:", session); // ✅ debug
+      console.log("Error:", error); // ✅ debug
 
       if (session?.user) {
         setUser(session.user);
@@ -123,27 +130,25 @@ const HomePage = () => {
     else setAudioFile(file);
   };
 
-  const handleFileUpload = async (type) => {
-    if (!user) {
-      alert("Login first.");
-      return;
-    }
-
-    const file = type === "video" ? videoFile : audioFile;
-    if (!file) {
-      alert(`Please select a ${type} file.`);
-      return;
-    }
+  const handleFileUpload = async (type, file) => {
+    if (!user || !file) return;
 
     setUploading(true);
+    setUploadProgress(0);
 
     const ext = file.name.split(".").pop();
     const filePath = `${type}s/${user.id}/${Date.now()}.${ext}`;
 
-    // Upload to Supabase Storage
     const { error: uploadError } = await supabase.storage
       .from(`${type}s`)
-      .upload(filePath, file);
+      .upload(filePath, file, {
+        onUploadProgress: (progressEvent) => {
+          const percent = Math.round(
+            (progressEvent.loaded / progressEvent.total) * 100
+          );
+          setUploadProgress(percent);
+        },
+      });
 
     if (uploadError) {
       console.error(`${type} upload failed:`, uploadError);
@@ -152,20 +157,17 @@ const HomePage = () => {
       return;
     }
 
-    // Get public URL
-    const { data: publicData } = supabase
-      .storage
+    const { data: publicData } = supabase.storage
       .from(`${type}s`)
       .getPublicUrl(filePath);
 
     const publicUrl = publicData.publicUrl;
 
-    // Save metadata in DB
     const { error: dbError } = await supabase.from("media_uploads").insert([
       {
         user_id: user.id,
         file_url: publicUrl,
-        type: type,
+        type,
       },
     ]);
 
@@ -174,9 +176,11 @@ const HomePage = () => {
       alert("Upload succeeded, but DB insert failed.");
     } else {
       alert(`${type.toUpperCase()} uploaded and saved to database!`);
+      fetchUploads(); // refresh file list
     }
 
     setUploading(false);
+    setUploadProgress(0);
   };
 
   // Optionally, fetch uploads when user changes or after upload
@@ -227,37 +231,142 @@ const HomePage = () => {
           <button className="homepage-search-btn">Search</button>
         </div>
 
-        <div className="homepage-upload-container">
-          <input
-            type="file"
-            accept="video/mp4"
-            onChange={(e) => handleFileChange(e, "video")}
-            className="file-input"
-          />
-          <button
-            className="homepage-upload-btn"
-            onClick={() => handleFileUpload("video")}
-            disabled={uploading}
-          >
-            {uploading ? "Uploading..." : "Upload VIDEO"}
-          </button>
+        <div className="upload-section">
+          <div className="upload-row">
+            <div
+              className="upload-card dropzone"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                  setVideoFile(file);
+                  setSelectedVideo(file);
+                }
+              }}
+            >
+              <p>📹 Drag & Drop Video</p>
+              <input
+                type="file"
+                accept="video/mp4"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    setVideoFile(file);
+                    setSelectedVideo(file);
+                  }
+                }}
+              />
+              {selectedVideo && (
+                <p className="selected-file">{selectedVideo.name}</p>
+              )}
+            </div>
+
+            {selectedVideo && (
+              <>
+                <button
+                  className="delete-btn-outside"
+                  onClick={() => {
+                    setVideoFile(null);
+                    setSelectedVideo(null);
+                  }}
+                >
+                  ❌
+                </button>
+                <button
+                  className="upload-action-btn-outside"
+                  onClick={() => {
+                    setUploadType("video");
+                    handleFileUpload("video", selectedVideo);
+                    setSelectedVideo(null);
+                  }}
+                  disabled={uploading}
+                >
+                  {uploading && uploadType === "video"
+                    ? "Uploading..."
+                    : "Upload"}
+                </button>
+              </>
+            )}
+          </div>
+
+          {uploadType === "video" && uploading && (
+            <progress
+              value={uploadProgress}
+              max="100"
+              className="upload-progress"
+            />
+          )}
+
+          <div className="upload-row">
+            <div
+              className="upload-card dropzone"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                  setAudioFile(file);
+                  setSelectedAudio(file);
+                }
+              }}
+            >
+              <p>🎧 Drag & Drop Audio</p>
+              <input
+                type="file"
+                accept="audio/mp3"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    setAudioFile(file);
+                    setSelectedAudio(file);
+                  }
+                }}
+              />
+              {selectedAudio && (
+                <p className="selected-file">{selectedAudio.name}</p>
+              )}
+            </div>
+
+            {selectedAudio && (
+              <>
+                <button
+                  className="delete-btn-outside"
+                  onClick={() => {
+                    setAudioFile(null);
+                    setSelectedAudio(null);
+                  }}
+                >
+                  ❌
+                </button>
+
+                <button
+                  className="upload-action-btn-outside"
+                  onClick={() => {
+                    setUploadType("audio");
+                    handleFileUpload("audio", selectedAudio);
+                    setSelectedAudio(null);
+                  }}
+                  disabled={uploading}
+                >
+                  {uploading && uploadType === "audio"
+                    ? "Uploading..."
+                    : "Upload"}
+                </button>
+              </>
+            )}
+          </div>
+
+          {uploadType === "audio" && uploading && (
+            <progress
+              value={uploadProgress}
+              max="100"
+              className="upload-progress"
+            />
+          )}
         </div>
 
-        <div className="homepage-upload-container">
-          <input
-            type="file"
-            accept="audio/mp3"
-            onChange={(e) => handleFileChange(e, "audio")}
-            className="file-input"
-          />
-          <button
-            className="homepage-upload-btn"
-            onClick={() => handleFileUpload("audio")}
-            disabled={uploading}
-          >
-            {uploading ? "Uploading..." : "Upload AUDIO"}
-          </button>
-        </div>
+        
       </div>
     </div>
   );
