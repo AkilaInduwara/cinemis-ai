@@ -3,12 +3,38 @@ import { Outlet } from "react-router-dom"; // This will render child pages
 import "../css/MainLayout.css";
 import { supabase } from "../supabaseClient";
 
+// Preload a single image
+const preloadImage = (url) =>
+  new Promise((resolve) => {
+    const img = new Image();
+    img.src = url;
+    img.onload = () => resolve();
+  });
+
 const MainLayout = () => {
   const [backgroundImages, setBackgroundImages] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchImageUrls = async () => {
+    const loadImagesFromCache = () => {
+      const cached = localStorage.getItem("backgroundImages");
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setBackgroundImages(parsed);
+            setLoading(false);
+            return true;
+          }
+        } catch (err) {
+          console.warn("Error parsing cached backgroundImages:", err);
+        }
+      }
+      return false;
+    };
+
+    const fetchAndPreloadImages = async () => {
       const { data: files, error } = await supabase.storage
         .from("backgrounds")
         .list("", { limit: 100 });
@@ -23,15 +49,23 @@ const MainLayout = () => {
           const { data } = supabase.storage
             .from("backgrounds")
             .getPublicUrl(file.name);
-          console.log("Resolved Public URL:", data?.publicUrl);
-          return data?.publicUrl ? `url(${data.publicUrl})` : null;
+          return data?.publicUrl || null;
         })
-        .filter((url) => url !== null);
+        .filter(Boolean);
 
-      setBackgroundImages(urls);
+      await Promise.all(urls.map(preloadImage));
+
+      const styledUrls = urls.map((url) => `url(${url})`);
+      setBackgroundImages(styledUrls);
+      localStorage.setItem("backgroundImages", JSON.stringify(styledUrls));
+      setLoading(false);
     };
 
-    fetchImageUrls();
+    // Try to load from cache first
+    const cacheHit = loadImagesFromCache();
+    if (!cacheHit) {
+      fetchAndPreloadImages();
+    }
   }, []);
 
   useEffect(() => {
@@ -46,11 +80,15 @@ const MainLayout = () => {
 
   return (
     <div className="mainlayout-container">
+      {loading && <div className="loading-overlay">Loading...</div>}
+
       <div
         className="mainlayout-background-image"
         style={{ backgroundImage: backgroundImages[currentIndex] }}
       ></div>
+
       <div className="mainlayout-background-overlay"></div>
+
       <div className="mainlayout-content">
         <Outlet />
       </div>

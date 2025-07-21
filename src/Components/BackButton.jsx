@@ -2,24 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../css/BackButton.css'; // Add the styles for the back button
 
-const BackButton = () => {
+const BackButton = ({ onBackConfirm }) => {
   const navigate = useNavigate();
   const [canGoBack, setCanGoBack] = useState(false);
 
   useEffect(() => {
-    // Check if there's history to go back to
-    if (window.history.length > 1) {
-      setCanGoBack(true);  // There is history to go back to
-    } else {
-      setCanGoBack(false);  // No history, so disable the button
-    }
+    setCanGoBack(window.history.length > 1);
   }, []);
 
-  const handleBackClick = () => {
+  const handleBackClick = async () => {
+    if (onBackConfirm) {
+      const shouldGoBack = await onBackConfirm();
+      if (!shouldGoBack) return;
+    }
+
     if (canGoBack) {
-      navigate(-1); // Go back to the previous page
+      navigate(-1);
     } else {
-      navigate('/'); // Redirect to the home page if no history
+      navigate('/');
     }
   };
 
@@ -27,7 +27,7 @@ const BackButton = () => {
     <button
       className={`back-button ${!canGoBack ? 'disabled' : ''}`}
       onClick={handleBackClick}
-      disabled={!canGoBack}  // Disable the button when no history to go back to
+      disabled={!canGoBack}
     >
       <span className="back-arrow"></span> Back
     </button>

@@ -201,7 +201,19 @@ const HomePage = () => {
       <div className="homepage-background-overlay"></div>
 
       <div className="homepage-main-content">
-        <BackButton />
+        <BackButton
+          onBackConfirm={async () => {
+            const confirmLogout = window.confirm("Do you want to LogOut?");
+            if (confirmLogout) {
+              await supabase.auth.signOut();
+              alert("You have logged out.");
+              navigate("/");
+              return false; // prevent history navigation
+            }
+            return false; // don't navigate back
+          }}
+        />
+
         <h1 className="homepage-logo">CineMIS AI</h1>
         <p className="homepage-tagline">Find your Movie with us</p>
 
