@@ -30,6 +30,7 @@ const HomePage = () => {
 
       if (session?.user) {
         setUser(session.user);
+        console.log("User metadata:", session.user.user_metadata); // ✅ Add this
         fetchUserDetails(session.user.id);
       }
 
@@ -59,12 +60,15 @@ const HomePage = () => {
       .eq("id", userId)
       .single();
 
-    // If no data found, insert new user
-    if (!data) {
+    if (data) {
+      setUserDetails(data);
+    } else if (!data && !error) {
+      // only insert if data is null AND there's no error
       const currentUser = await supabase.auth.getUser();
       const userMeta = currentUser?.data?.user?.user_metadata || {};
       const name = userMeta?.name || userMeta?.full_name || "Anonymous";
       const email = currentUser?.data?.user?.email;
+      const avatar_url = userMeta?.avatar_url || null;
 
       const { data: insertData, error: insertError } = await supabase
         .from("users")
@@ -73,6 +77,7 @@ const HomePage = () => {
             id: userId,
             name,
             email,
+            avatar_url,
             created_at: dayjs().toISOString(),
           },
         ])
@@ -84,8 +89,6 @@ const HomePage = () => {
       } else {
         setUserDetails(insertData);
       }
-    } else if (data) {
-      setUserDetails(data);
     } else {
       console.error("Error fetching user:", error);
     }
@@ -188,6 +191,10 @@ const HomePage = () => {
     if (user) fetchUploads();
   }, [user]);
 
+  useEffect(() => {
+    console.log("Fetched user details:", userDetails);
+  }, [userDetails]);
+
   return (
     <div className="homepage-hero-container">
       <div className="homepage-background-image"></div>
@@ -200,10 +207,15 @@ const HomePage = () => {
 
         <div className="user-logo-container" onClick={toggleDropdown}>
           <img
-            src="src/Images/default-avatar.png"
+            src={
+              userDetails?.avatar_url ||
+              user?.user_metadata?.avatar_url ||
+              "src/Images/default-avatar.png"
+            }
             alt="User Logo"
             className="user-logo"
           />
+
           {dropdownVisible && (
             <div className="dropdown-menu">
               <p className="dropdown-item">
@@ -365,8 +377,6 @@ const HomePage = () => {
             />
           )}
         </div>
-
-        
       </div>
     </div>
   );
