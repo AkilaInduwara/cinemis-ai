@@ -4,6 +4,7 @@ import "../css/HomePage.css";
 import BackButton from "../Components/BackButton";
 import { supabase } from "../supabaseClient";
 import dayjs from "dayjs";
+import { searchTMDb, getDetails } from "../api/tmdbApi";
 
 const HomePage = () => {
   const [dropdownVisible, setDropdownVisible] = useState(false);
@@ -18,6 +19,9 @@ const HomePage = () => {
   const [uploadType, setUploadType] = useState("");
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [selectedAudio, setSelectedAudio] = useState(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [loadingResults, setLoadingResults] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -195,6 +199,24 @@ const HomePage = () => {
     console.log("Fetched user details:", userDetails);
   }, [userDetails]);
 
+
+  const handleSearch = async () => {
+  if (!query.trim()) return;
+  setLoadingResults(true);
+  const rawResults = await searchTMDb(query);
+  
+  // Get full details for each result (limit to 5 for now)
+  const enriched = await Promise.all(
+    rawResults.slice(0, 5).map(async (item) => {
+      const details = await getDetails(item.media_type, item.id);
+      return { ...item, details };
+    })
+  );
+
+  setResults(enriched);
+  setLoadingResults(false);
+};
+
   return (
     <div className="homepage-hero-container">
       <div className="homepage-background-image"></div>
@@ -251,8 +273,12 @@ const HomePage = () => {
             type="text"
             placeholder="Enter plot details, a dialogue or movie details"
             className="homepage-search-bar"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
           />
-          <button className="homepage-search-btn">Search</button>
+          <button className="homepage-search-btn" onClick={handleSearch}>
+            Search
+          </button>
         </div>
 
         <div className="upload-section">
@@ -389,6 +415,36 @@ const HomePage = () => {
             />
           )}
         </div>
+
+        {loadingResults && <p style={{ color: "white" }}>Loading...</p>}
+
+        {results.length > 0 && (
+          <div className="results-container">
+            {results.map((item, index) => {
+              const info = item.details;
+              const poster = info.poster_path
+                ? `https://image.tmdb.org/t/p/w300${info.poster_path}`
+                : "https://via.placeholder.com/300x450?text=No+Image";
+
+              const trailer = info.videos?.results?.find(v => v.type === "Trailer");
+
+              return (
+                <div key={index} className="result-card">
+                  <img src={poster} alt="poster" />
+                  <h3>{info.title || info.name}</h3>
+                  <p><strong>Genres:</strong> {info.genres.map(g => g.name).join(", ")}</p>
+                  <p><strong>Overview:</strong> {info.overview}</p>
+                  <p><strong>Cast:</strong> {info.credits?.cast?.slice(0, 5).map(c => c.name).join(", ")}</p>
+                  {trailer && (
+                    <a href={`https://youtube.com/watch?v=${trailer.key}`} target="_blank" rel="noopener noreferrer">
+                      ▶️ Watch Trailer
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
