@@ -199,224 +199,246 @@ const HomePage = () => {
     console.log("Fetched user details:", userDetails);
   }, [userDetails]);
 
-
   const handleSearch = async () => {
-  if (!query.trim()) return;
-  setLoadingResults(true);
-  const rawResults = await searchTMDb(query);
-  
-  // Get full details for each result (limit to 5 for now)
-  const enriched = await Promise.all(
-    rawResults.slice(0, 5).map(async (item) => {
-      const details = await getDetails(item.media_type, item.id);
-      return { ...item, details };
-    })
-  );
+    if (!query.trim()) return;
 
-  setResults(enriched);
-  setLoadingResults(false);
-};
+    setLoadingResults(true);
+    const rawResults = await searchTMDb(query);
+
+    // ✅ Guard clause to handle undefined or invalid results
+    if (!Array.isArray(rawResults)) {
+      console.error("Unexpected API result:", rawResults);
+      setResults([]); // Clear old results if any
+      setLoadingResults(false); // Stop loading spinner
+      return; // Exit early
+    }
+
+    // Get full details for each result (limit to 5 for now)
+    const enriched = await Promise.all(
+      rawResults.slice(0, 5).map(async (item) => {
+        try {
+          const details = await getDetails(item.media_type, item.id);
+          return { ...item, details };
+        } catch (e) {
+          console.warn("Failed to fetch details for:", item);
+          return null;
+        }
+      })
+    );
+
+    setResults(enriched.filter(Boolean)); // Remove any nulls
+    setLoadingResults(false);
+  };
 
   return (
     <div className="homepage-hero-container">
-      <div className="homepage-background-image"></div>
-      <div className="homepage-background-overlay"></div>
+      <div className="homepage-background-image" />
+      <div className="homepage-background-overlay" />
 
-      <div className="homepage-main-content">
-        <BackButton
-          onBackConfirm={async () => {
-            const confirmLogout = window.confirm("Do you want to Logout?");
-            if (confirmLogout) {
-              await supabase.auth.signOut();
-              alert("You have logged out.");
-              navigate("/");
-              return false; // prevent history navigation
-            }
-            return false; // don't navigate back
-          }}
-        />
-
-        <h1 className="homepage-logo">CineMIS AI</h1>
-        <p className="homepage-tagline">Find your Movie with us</p>
-
-        <div className="user-logo-container" onClick={toggleDropdown}>
-          <img
-            src={
-              userDetails?.avatar_url ||
-              user?.user_metadata?.avatar_url ||
-              "src/Images/default-avatar.png"
-            }
-            alt="User Logo"
-            className="user-logo"
+      {/* Hero Section */}
+      <section className="homepage-hero-section">
+        <div className="homepage-main-content">
+          <BackButton
+            onBackConfirm={async () => {
+              const confirmLogout = window.confirm("Do you want to Logout?");
+              if (confirmLogout) {
+                await supabase.auth.signOut();
+                alert("You have logged out.");
+                navigate("/");
+                return false;
+              }
+              return false;
+            }}
           />
 
-          {dropdownVisible && (
-            <div className="dropdown-menu">
-              <p className="dropdown-item">
-                Name: {userDetails?.name || "Loading..."}
-              </p>
-              <p className="dropdown-item">
-                Email: {userDetails?.email || "Loading..."}
-              </p>
-              <button
-                className="dropdown-item logout-btn"
-                onClick={handleLogout}
-              >
-                Logout
-              </button>
-            </div>
-          )}
-        </div>
+          <h1 className="homepage-logo">CineMIS AI</h1>
+          <p className="homepage-tagline">Find your Movie with us</p>
 
-        <div className="homepage-search-container">
-          <input
-            type="text"
-            placeholder="Enter plot details, a dialogue or movie details"
-            className="homepage-search-bar"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <button className="homepage-search-btn" onClick={handleSearch}>
-            Search
-          </button>
-        </div>
+          <div className="user-logo-container" onClick={toggleDropdown}>
+            <img
+              src={
+                userDetails?.avatar_url ||
+                user?.user_metadata?.avatar_url ||
+                "src/Images/default-avatar.png"
+              }
+              alt="User Logo"
+              className="user-logo"
+            />
 
-        <div className="upload-section">
-          <div className="upload-row">
-            <div
-              className="upload-card dropzone"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const file = e.dataTransfer.files[0];
-                if (file) {
-                  setVideoFile(file);
-                  setSelectedVideo(file);
-                }
-              }}
-            >
-              <p>📹 Drag & Drop Video</p>
-              <input
-                type="file"
-                accept="video/mp4"
-                onChange={(e) => {
-                  const file = e.target.files[0];
+            {dropdownVisible && (
+              <div className="dropdown-menu">
+                <p className="dropdown-item">
+                  Name: {userDetails?.name || "Loading..."}
+                </p>
+                <p className="dropdown-item">
+                  Email: {userDetails?.email || "Loading..."}
+                </p>
+                <button
+                  className="dropdown-item logout-btn"
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="homepage-search-container">
+            <input
+              type="text"
+              placeholder="Enter plot details, a dialogue or movie details"
+              className="homepage-search-bar"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <button className="homepage-search-btn" onClick={handleSearch}>
+              Search
+            </button>
+          </div>
+
+          <div className="upload-section">
+            {/* VIDEO */}
+            <div className="upload-row">
+              <div
+                className="upload-card dropzone"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files[0];
                   if (file) {
                     setVideoFile(file);
                     setSelectedVideo(file);
                   }
                 }}
-              />
+              >
+                <p>📹 Drag & Drop Video</p>
+                <input
+                  type="file"
+                  accept="video/mp4"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      setVideoFile(file);
+                      setSelectedVideo(file);
+                    }
+                  }}
+                />
+                {selectedVideo && (
+                  <p className="selected-file">{selectedVideo.name}</p>
+                )}
+              </div>
+
               {selectedVideo && (
-                <p className="selected-file">{selectedVideo.name}</p>
+                <>
+                  <button
+                    className="delete-btn-outside"
+                    onClick={() => {
+                      setVideoFile(null);
+                      setSelectedVideo(null);
+                    }}
+                  >
+                    ❌
+                  </button>
+                  <button
+                    className="upload-action-btn-outside"
+                    onClick={() => {
+                      setUploadType("video");
+                      handleFileUpload("video", selectedVideo);
+                      setSelectedVideo(null);
+                    }}
+                    disabled={uploading}
+                  >
+                    {uploading && uploadType === "video"
+                      ? "Uploading..."
+                      : "Upload"}
+                  </button>
+                </>
               )}
             </div>
 
-            {selectedVideo && (
-              <>
-                <button
-                  className="delete-btn-outside"
-                  onClick={() => {
-                    setVideoFile(null);
-                    setSelectedVideo(null);
-                  }}
-                >
-                  ❌
-                </button>
-                <button
-                  className="upload-action-btn-outside"
-                  onClick={() => {
-                    setUploadType("video");
-                    handleFileUpload("video", selectedVideo);
-                    setSelectedVideo(null);
-                  }}
-                  disabled={uploading}
-                >
-                  {uploading && uploadType === "video"
-                    ? "Uploading..."
-                    : "Upload"}
-                </button>
-              </>
+            {uploadType === "video" && uploading && (
+              <progress
+                value={uploadProgress}
+                max="100"
+                className="upload-progress"
+              />
             )}
-          </div>
 
-          {uploadType === "video" && uploading && (
-            <progress
-              value={uploadProgress}
-              max="100"
-              className="upload-progress"
-            />
-          )}
-
-          <div className="upload-row">
-            <div
-              className="upload-card dropzone"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const file = e.dataTransfer.files[0];
-                if (file) {
-                  setAudioFile(file);
-                  setSelectedAudio(file);
-                }
-              }}
-            >
-              <p>🎧 Drag & Drop Audio</p>
-              <input
-                type="file"
-                accept="audio/mp3"
-                onChange={(e) => {
-                  const file = e.target.files[0];
+            {/* AUDIO */}
+            <div className="upload-row">
+              <div
+                className="upload-card dropzone"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files[0];
                   if (file) {
                     setAudioFile(file);
                     setSelectedAudio(file);
                   }
                 }}
-              />
+              >
+                <p>🎧 Drag & Drop Audio</p>
+                <input
+                  type="file"
+                  accept="audio/mp3"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      setAudioFile(file);
+                      setSelectedAudio(file);
+                    }
+                  }}
+                />
+                {selectedAudio && (
+                  <p className="selected-file">{selectedAudio.name}</p>
+                )}
+              </div>
+
               {selectedAudio && (
-                <p className="selected-file">{selectedAudio.name}</p>
+                <>
+                  <button
+                    className="delete-btn-outside"
+                    onClick={() => {
+                      setAudioFile(null);
+                      setSelectedAudio(null);
+                    }}
+                  >
+                    ❌
+                  </button>
+                  <button
+                    className="upload-action-btn-outside"
+                    onClick={() => {
+                      setUploadType("audio");
+                      handleFileUpload("audio", selectedAudio);
+                      setSelectedAudio(null);
+                    }}
+                    disabled={uploading}
+                  >
+                    {uploading && uploadType === "audio"
+                      ? "Uploading..."
+                      : "Upload"}
+                  </button>
+                </>
               )}
             </div>
 
-            {selectedAudio && (
-              <>
-                <button
-                  className="delete-btn-outside"
-                  onClick={() => {
-                    setAudioFile(null);
-                    setSelectedAudio(null);
-                  }}
-                >
-                  ❌
-                </button>
-
-                <button
-                  className="upload-action-btn-outside"
-                  onClick={() => {
-                    setUploadType("audio");
-                    handleFileUpload("audio", selectedAudio);
-                    setSelectedAudio(null);
-                  }}
-                  disabled={uploading}
-                >
-                  {uploading && uploadType === "audio"
-                    ? "Uploading..."
-                    : "Upload"}
-                </button>
-              </>
+            {uploadType === "audio" && uploading && (
+              <progress
+                value={uploadProgress}
+                max="100"
+                className="upload-progress"
+              />
             )}
           </div>
-
-          {uploadType === "audio" && uploading && (
-            <progress
-              value={uploadProgress}
-              max="100"
-              className="upload-progress"
-            />
-          )}
         </div>
+      </section>
 
-        {loadingResults && <p style={{ color: "white" }}>Loading...</p>}
+      {/* Results Section */}
+      <section className="homepage-results-section">
+        {loadingResults && (
+          <p style={{ color: "white", textAlign: "center" }}>Loading...</p>
+        )}
 
         {results.length > 0 && (
           <div className="results-container">
@@ -424,28 +446,53 @@ const HomePage = () => {
               const info = item.details;
               const poster = info.poster_path
                 ? `https://image.tmdb.org/t/p/w300${info.poster_path}`
-                : "https://via.placeholder.com/300x450?text=No+Image";
+                : "https://image.tmdb.org/t/p/w300_and_h450_bestv2//t/p/w300/no_image_available.jpg";
 
-              const trailer = info.videos?.results?.find(v => v.type === "Trailer");
+              const trailer = info.videos?.results?.find(
+                (v) => v.type === "Trailer"
+              );
 
               return (
                 <div key={index} className="result-card">
                   <img src={poster} alt="poster" />
-                  <h3>{info.title || info.name}</h3>
-                  <p><strong>Genres:</strong> {info.genres.map(g => g.name).join(", ")}</p>
-                  <p><strong>Overview:</strong> {info.overview}</p>
-                  <p><strong>Cast:</strong> {info.credits?.cast?.slice(0, 5).map(c => c.name).join(", ")}</p>
-                  {trailer && (
-                    <a href={`https://youtube.com/watch?v=${trailer.key}`} target="_blank" rel="noopener noreferrer">
-                      ▶️ Watch Trailer
-                    </a>
-                  )}
+                  <div className="result-details">
+                    <h3>{info.title || info.name}</h3>
+                    <p>
+                      <strong>Genres:</strong>{" "}
+                      {info.genres.map((g) => g.name).join(", ")}
+                    </p>
+                    <p>
+                      <strong>Overview:</strong> {info.overview}
+                    </p>
+                    <p>
+                      <strong>Cast:</strong>{" "}
+                      {info.credits?.cast
+                        ?.slice(0, 5)
+                        .map((c) => c.name)
+                        .join(", ")}
+                    </p>
+                    {trailer && (
+                      <a
+                        href={`https://youtube.com/watch?v=${trailer.key}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        ▶️ Watch Trailer
+                      </a>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
         )}
-      </div>
+
+        {!loadingResults && results.length === 0 && query && (
+          <p style={{ color: "white", textAlign: "center" }}>
+            No results found for "{query}"
+          </p>
+        )}
+      </section>
     </div>
   );
 };

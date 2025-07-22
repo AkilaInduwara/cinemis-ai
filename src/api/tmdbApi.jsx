@@ -1,10 +1,15 @@
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
-const BASE_URL = "https://api.themoviedb.org/3/";
+const BASE_URL = "https://api.themoviedb.org/3";
 
 export const searchTMDb = async (query) => {
-  const res = await fetch(`${BASE_URL}/search/multi?api_key=${API_KEY}&query=${encodeURIComponent(query)}`);
-  const data = await res.json();
-  return data.results;
+  try {
+    const res = await fetch(`${BASE_URL}/search/multi?api_key=${API_KEY}&query=${encodeURIComponent(query)}`);
+    const data = await res.json();
+    return data?.results || []; // ensure it returns an array
+  } catch (error) {
+    console.error("TMDb search error:", error);
+    return [];
+  }
 };
 
 export const getDetails = async (mediaType, id) => {
