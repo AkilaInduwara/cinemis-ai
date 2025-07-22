@@ -203,7 +203,7 @@ const HomePage = () => {
       <div className="homepage-main-content">
         <BackButton
           onBackConfirm={async () => {
-            const confirmLogout = window.confirm("Do you want to LogOut?");
+            const confirmLogout = window.confirm("Do you want to Logout?");
             if (confirmLogout) {
               await supabase.auth.signOut();
               alert("You have logged out.");
