@@ -1,0 +1,7 @@
+openai
+pinecone-client
+pandas
+tmdbsimple
+tqdm
+fastapi
+uvicorn

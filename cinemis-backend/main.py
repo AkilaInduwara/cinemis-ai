@@ -3,6 +3,7 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 
+
 app = FastAPI()
 
 # Allow requests from your frontend (adjust origin in production)
@@ -28,3 +29,4 @@ async def test_upload(file: UploadFile = File(...)):
         "filename": file.filename,
         "content_type": file.content_type
     }
+
