@@ -1,7 +1,10 @@
 openai
-pinecone-client
+pinecone-client>=3.0.0
 pandas
 tmdbsimple
 tqdm
 fastapi
 uvicorn
+python-dotenv
+fastapi-cors
+requests
