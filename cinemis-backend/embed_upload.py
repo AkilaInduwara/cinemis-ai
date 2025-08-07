@@ -1,90 +1,90 @@
 import os
-import pandas as pd
-from tqdm import tqdm
+import json
+import time
+import requests
+import tqdm
+import pinecone
 from dotenv import load_dotenv
-
 from pinecone import Pinecone, ServerlessSpec
-from sentence_transformers import SentenceTransformer
 
 # Load environment variables
 load_dotenv()
 
-# Load embedding model (no API needed)
-model = SentenceTransformer("all-MiniLM-L6-v2")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_ENV = os.getenv("PINECONE_ENV") or "us-east-1-aws"
+PINECONE_INDEX = os.getenv("PINECONE_INDEX") or "cine-index"
+HUGGINGFACE_API_TOKEN = os.getenv("HF_API_KEY")
 
-# Init Pinecone
-pinecone_api_key = os.getenv("PINECONE_API_KEY")
-pinecone_index_name = os.getenv("PINECONE_INDEX", "cine-index")
-pinecone_env = os.getenv("PINECONE_ENV", "us-east-1")
+# Use this model
+HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2"
+HEADERS = {"Authorization": f"Bearer {HUGGINGFACE_API_TOKEN}"}
 
-pc = Pinecone(api_key=pinecone_api_key)
 
-# Create index if not exists
-if pinecone_index_name not in pc.list_indexes().names():
-    pc.create_index(
-        name=pinecone_index_name,
-        dimension=384,  # all-MiniLM-L6-v2 has 384 dimensions
-        metric="cosine",
-        spec=ServerlessSpec(cloud="aws", region=pinecone_env)
+def embed(text):
+    """Generate embedding from Hugging Face."""
+    response = requests.post(
+        HUGGINGFACE_API_URL,
+        headers=HEADERS,
+        json={"inputs": text, "options": {"wait_for_model": True}}
     )
 
-index = pc.Index(pinecone_index_name)
+    if response.status_code == 429:
+        print("⚠️ Rate limit hit. Waiting...")
+        time.sleep(5)
+        return embed(text)
 
-# Load dataset
-df = pd.read_csv("tmdb_movies_tv_large.csv")
-df = df.dropna(subset=["overview"])
-df = df[df["overview"].str.strip().astype(bool)]
+    if not response.ok:
+        raise Exception(f"HuggingFace API error: {response.status_code} - {response.text}")
 
-# Get existing vector IDs (optional)
-print("🔍 Fetching existing vector IDs from Pinecone...")
-existing_ids = set()
+    # Fix: HuggingFace returns {"embeddings": [...]}, but sometimes just a list
+    result = response.json()
+    if isinstance(result, dict) and "embeddings" in result:
+        return result["embeddings"][0]
+    elif isinstance(result, list):
+        return result[0]
+    else:
+        raise Exception(f"Unexpected embedding response: {result}")
 
-try:
-    stats = index.describe_index_stats()
-    total_vectors = stats.total_vector_count
-    print(f"📦 Pinecone index currently has {total_vectors} vectors.")
-except Exception as e:
-    print(f"⚠️ Could not fetch Pinecone stats: {e}")
 
-# Embed and upload
-failed = []
+def load_data(filepath):
+    with open(filepath, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-print(f"📄 Starting embedding for {len(df)} items...")
 
-for _, row in tqdm(df.iterrows(), total=len(df)):
-    vector_id = f"{row['type']}_{row['id']}"
+def main():
+    # Load data
+    data = load_data("combined_movie_tv_data.json")
 
-    if vector_id in existing_ids:
-        continue  # Skip already uploaded
+    # Initialize Pinecone (new API)
+    pc = Pinecone(api_key=PINECONE_API_KEY)
+    # Create index if not exists
+    if PINECONE_INDEX not in [idx.name for idx in pc.list_indexes()]:
+        pc.create_index(
+            name=PINECONE_INDEX,
+            dimension=384,
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
+        )
+    index = pc.Index(PINECONE_INDEX)
 
-    try:
-        text = row["overview"]
-        embedding = model.encode(text).tolist()
+    for item in tqdm.tqdm(data):
+        try:
+            title = item.get("title", "")
+            description = item.get("overview", "")
+            year = item.get("year", "Unknown")
 
-        metadata = {
-            "title": row["title"],
-            "type": row["type"],
-            "genre": row["genre"],
-            "year": int(row["year"]),
-            "overview": text
-        }
+            combined_text = f"{title} ({year}): {description}"
+            embedding = embed(combined_text)
 
-        index.upsert([
-            {
-                "id": vector_id,
-                "values": embedding,
-                "metadata": metadata
-            }
-        ])
+            # Pinecone expects embedding as a list of floats
+            index.upsert([(str(item["id"]), embedding, item)])
 
-    except Exception as e:
-        print(f"❌ Error embedding '{row.get('title', 'Unknown')}': {e}")
-        failed.append(row.get("title", "Unknown"))
+        except Exception as e:
+            print(f"❌ Error embedding '{item.get('title', '')}': {e}")
 
-# Save failed ones
-if failed:
-    with open("failed_embeddings.txt", "w", encoding="utf-8") as f:
-        f.write("\n".join(failed))
-    print(f"⚠️ {len(failed)} items failed. See 'failed_embeddings.txt'")
-else:
-    print("✅ All embeddings uploaded successfully.")
+
+if __name__ == "__main__":
+    main()
