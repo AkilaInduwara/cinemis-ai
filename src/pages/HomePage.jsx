@@ -22,6 +22,7 @@ const HomePage = () => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [loadingResults, setLoadingResults] = useState(false);
+  const [searchMode, setSearchMode] = useState("title"); // New state
 
   useEffect(() => {
     const init = async () => {
@@ -201,32 +202,51 @@ const HomePage = () => {
 
   const handleSearch = async () => {
     if (!query.trim()) return;
-
     setLoadingResults(true);
-    const rawResults = await searchTMDb(query);
 
-    // ✅ Guard clause to handle undefined or invalid results
-    if (!Array.isArray(rawResults)) {
-      console.error("Unexpected API result:", rawResults);
-      setResults([]); // Clear old results if any
-      setLoadingResults(false); // Stop loading spinner
-      return; // Exit early
+    if (searchMode === "title") {
+      // TMDB Title Search (Option 4)
+      const rawResults = await searchTMDb(query);
+
+      if (!Array.isArray(rawResults)) {
+        console.error("TMDB returned invalid data:", rawResults);
+        setResults([]);
+        setLoadingResults(false);
+        return;
+      }
+
+      const enriched = await Promise.all(
+        rawResults.slice(0, 5).map(async (item) => {
+          try {
+            const details = await getDetails(item.media_type, item.id);
+            return { ...item, details };
+          } catch (e) {
+            console.warn("Failed to enrich TMDB item:", item);
+            return null;
+          }
+        })
+      );
+
+      setResults(enriched.filter(Boolean));
+    } else {
+      // Local FAISS Plot Search (Option 3)
+      try {
+        const response = await fetch("http://localhost:8000/search-plot", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ query, top_k: 5 }),
+        });
+
+        const data = await response.json();
+        setResults(data.results || []);
+      } catch (err) {
+        console.error("Plot search failed:", err);
+        setResults([]);
+      }
     }
 
-    // Get full details for each result (limit to 5 for now)
-    const enriched = await Promise.all(
-      rawResults.slice(0, 5).map(async (item) => {
-        try {
-          const details = await getDetails(item.media_type, item.id);
-          return { ...item, details };
-        } catch (e) {
-          console.warn("Failed to fetch details for:", item);
-          return null;
-        }
-      })
-    );
-
-    setResults(enriched.filter(Boolean)); // Remove any nulls
     setLoadingResults(false);
   };
 
@@ -281,6 +301,29 @@ const HomePage = () => {
                 </button>
               </div>
             )}
+          </div>
+
+          <div className="search-mode-toggle">
+            <label>
+              <input
+                type="radio"
+                name="search-mode"
+                value="title"
+                checked={searchMode === "title"}
+                onChange={() => setSearchMode("title")}
+              />
+              Title Search
+            </label>
+            <label style={{ marginLeft: "1rem" }}>
+              <input
+                type="radio"
+                name="search-mode"
+                value="plot"
+                checked={searchMode === "plot"}
+                onChange={() => setSearchMode("plot")}
+              />
+              Plot Search
+            </label>
           </div>
 
           <div className="homepage-search-container">
@@ -443,46 +486,57 @@ const HomePage = () => {
         {results.length > 0 && (
           <div className="results-container">
             {results.map((item, index) => {
-              const info = item.details;
-              const poster = info.poster_path
-                ? `https://image.tmdb.org/t/p/w300${info.poster_path}`
-                : "https://image.tmdb.org/t/p/w300_and_h450_bestv2//t/p/w300/no_image_available.jpg";
+              const isTMDB = !!item.details;
 
-              const trailer = info.videos?.results?.find(
-                (v) => v.type === "Trailer"
-              );
+              if (isTMDB) {
+                // TMDB (title) result
+                const info = item.details;
+                const poster = info.poster_path
+                  ? `https://image.tmdb.org/t/p/w300${info.poster_path}`
+                  : "https://image.tmdb.org/t/p/w300_and_h450_bestv2//t/p/w300/no_image_available.jpg";
 
-              return (
-                <div key={index} className="result-card">
-                  <img src={poster} alt="poster" />
-                  <div className="result-details">
-                    <h3>{info.title || info.name}</h3>
-                    <p>
-                      <strong>Genres:</strong>{" "}
-                      {info.genres.map((g) => g.name).join(", ")}
-                    </p>
-                    <p>
-                      <strong>Overview:</strong> {info.overview}
-                    </p>
-                    <p>
-                      <strong>Cast:</strong>{" "}
-                      {info.credits?.cast
-                        ?.slice(0, 5)
-                        .map((c) => c.name)
-                        .join(", ")}
-                    </p>
-                    {trailer && (
-                      <a
-                        href={`https://youtube.com/watch?v=${trailer.key}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        ▶️ Watch Trailer
-                      </a>
-                    )}
+                const trailer = info.videos?.results?.find((v) => v.type === "Trailer");
+
+                return (
+                  <div key={index} className="result-card">
+                    <img src={poster} alt="poster" />
+                    <div className="result-details">
+                      <h3>{info.title || info.name}</h3>
+                      <p><strong>Genres:</strong> {info.genres.map((g) => g.name).join(", ")}</p>
+                      <p><strong>Overview:</strong> {info.overview}</p>
+                      <p><strong>Cast:</strong> {info.credits?.cast?.slice(0, 5).map((c) => c.name).join(", ")}</p>
+                      {trailer && (
+                        <a href={`https://youtube.com/watch?v=${trailer.key}`} target="_blank" rel="noopener noreferrer">
+                          ▶️ Watch Trailer
+                        </a>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
+                );
+              } else {
+                // FAISS (plot) result
+                return (
+                  <div key={index} className="result-card">
+                    <img
+                      src={
+                        item.poster ||
+                        "https://image.tmdb.org/t/p/w300_and_h450_bestv2//t/p/w300/no_image_available.jpg"
+                      }
+                      alt="poster"
+                    />
+                    <div className="result-details">
+                      <h3>{item.title} ({item.year})</h3>
+                      <p><strong>Genres:</strong> {item.genre}</p>
+                      <p><strong>Overview:</strong> {item.overview}</p>
+                      {item.trailer && (
+                        <a href={item.trailer} target="_blank" rel="noopener noreferrer">
+                          ▶️ Watch Trailer
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
             })}
           </div>
         )}

@@ -458,6 +458,17 @@ body {
   min-height: 100vh;
 }
 
+.search-mode-toggle {
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 2rem;
+  font-size: 1rem;
+}
+.search-mode-toggle input {
+  margin-right: 0.5rem;
+}
+
+
 
 @media (max-width: 768px) {
   .homepage-logo {
