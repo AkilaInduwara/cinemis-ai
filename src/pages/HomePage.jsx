@@ -304,26 +304,18 @@ const HomePage = () => {
           </div>
 
           <div className="search-mode-toggle">
-            <label>
-              <input
-                type="radio"
-                name="search-mode"
-                value="title"
-                checked={searchMode === "title"}
-                onChange={() => setSearchMode("title")}
-              />
-              Title Search
-            </label>
-            <label style={{ marginLeft: "1rem" }}>
-              <input
-                type="radio"
-                name="search-mode"
-                value="plot"
-                checked={searchMode === "plot"}
-                onChange={() => setSearchMode("plot")}
-              />
-              Plot Search
-            </label>
+            <button
+              className={`toggle-btn ${searchMode === "title" ? "active" : ""}`}
+              onClick={() => setSearchMode("title")}
+            >
+              🔍 Title Search
+            </button>
+            <button
+              className={`toggle-btn ${searchMode === "plot" ? "active" : ""}`}
+              onClick={() => setSearchMode("plot")}
+            >
+              🧠 Plot Search
+            </button>
           </div>
 
           <div className="homepage-search-container">
@@ -495,18 +487,35 @@ const HomePage = () => {
                   ? `https://image.tmdb.org/t/p/w300${info.poster_path}`
                   : "https://image.tmdb.org/t/p/w300_and_h450_bestv2//t/p/w300/no_image_available.jpg";
 
-                const trailer = info.videos?.results?.find((v) => v.type === "Trailer");
+                const trailer = info.videos?.results?.find(
+                  (v) => v.type === "Trailer"
+                );
 
                 return (
                   <div key={index} className="result-card">
                     <img src={poster} alt="poster" />
                     <div className="result-details">
                       <h3>{info.title || info.name}</h3>
-                      <p><strong>Genres:</strong> {info.genres.map((g) => g.name).join(", ")}</p>
-                      <p><strong>Overview:</strong> {info.overview}</p>
-                      <p><strong>Cast:</strong> {info.credits?.cast?.slice(0, 5).map((c) => c.name).join(", ")}</p>
+                      <p>
+                        <strong>Genres:</strong>{" "}
+                        {info.genres.map((g) => g.name).join(", ")}
+                      </p>
+                      <p>
+                        <strong>Overview:</strong> {info.overview}
+                      </p>
+                      <p>
+                        <strong>Cast:</strong>{" "}
+                        {info.credits?.cast
+                          ?.slice(0, 5)
+                          .map((c) => c.name)
+                          .join(", ")}
+                      </p>
                       {trailer && (
-                        <a href={`https://youtube.com/watch?v=${trailer.key}`} target="_blank" rel="noopener noreferrer">
+                        <a
+                          href={`https://youtube.com/watch?v=${trailer.key}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
                           ▶️ Watch Trailer
                         </a>
                       )}
@@ -525,11 +534,21 @@ const HomePage = () => {
                       alt="poster"
                     />
                     <div className="result-details">
-                      <h3>{item.title} ({item.year})</h3>
-                      <p><strong>Genres:</strong> {item.genre}</p>
-                      <p><strong>Overview:</strong> {item.overview}</p>
+                      <h3>
+                        {item.title} ({item.year})
+                      </h3>
+                      <p>
+                        <strong>Genres:</strong> {item.genre}
+                      </p>
+                      <p>
+                        <strong>Overview:</strong> {item.overview}
+                      </p>
                       {item.trailer && (
-                        <a href={item.trailer} target="_blank" rel="noopener noreferrer">
+                        <a
+                          href={item.trailer}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
                           ▶️ Watch Trailer
                         </a>
                       )}

@@ -17,13 +17,13 @@ body {
 .homepage-hero-container {
   position: relative;
   width: 100%;
-  min-height: 100vh;   /* ✅ Let content grow beyond screen height */
+  min-height: 100vh; /* ✅ Let content grow beyond screen height */
   display: flex;
   flex-direction: column;
 }
 
 .homepage-background-image {
-  position: fixed;  /* was absolute */
+  position: fixed; /* was absolute */
   top: 0;
   left: 0;
   width: 100%;
@@ -35,7 +35,6 @@ body {
   filter: blur(1.6px);
   transition: background-image 1s ease-in-out;
 }
-
 
 .homepage-background-overlay {
   position: absolute;
@@ -459,16 +458,36 @@ body {
 }
 
 .search-mode-toggle {
-  margin-bottom: 1rem;
   display: flex;
-  gap: 2rem;
+  justify-content: center;
+  margin-bottom: 20px;
+  gap: 10px;
+}
+
+.toggle-btn {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 2px solid #888;
+  color: white;
+  font-weight: 500;
+  padding: 10px 18px;
+  border-radius: 25px;
+  cursor: pointer;
+  transition: all 0.25s ease;
   font-size: 1rem;
 }
-.search-mode-toggle input {
-  margin-right: 0.5rem;
+
+.toggle-btn:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-color: #ccc;
 }
 
-
+.toggle-btn.active {
+  background-color: #ff5757;
+  border-color: #ff5757;
+  color: white;
+  font-weight: bold;
+  box-shadow: 0 4px 10px rgba(255, 87, 87, 0.4);
+}
 
 @media (max-width: 768px) {
   .homepage-logo {
@@ -492,4 +511,15 @@ body {
   }
 }
 
+@media (max-width: 600px) {
+  .toggle-btn {
+    font-size: 0.9rem;
+    padding: 8px 14px;
+  }
 
+  .search-mode-toggle {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+}
