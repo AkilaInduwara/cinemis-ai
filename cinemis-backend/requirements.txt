@@ -1,0 +1,10 @@
+openai>=1.0.0
+pinecone
+pandas
+tmdbsimple
+tqdm
+fastapi
+uvicorn
+python-dotenv
+fastapi-cors
+requests

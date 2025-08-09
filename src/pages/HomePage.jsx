@@ -4,6 +4,7 @@ import "../css/HomePage.css";
 import BackButton from "../Components/BackButton";
 import { supabase } from "../supabaseClient";
 import dayjs from "dayjs";
+import { searchTMDb, getDetails } from "../api/tmdbApi";
 
 const HomePage = () => {
   const [dropdownVisible, setDropdownVisible] = useState(false);
@@ -18,6 +19,10 @@ const HomePage = () => {
   const [uploadType, setUploadType] = useState("");
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [selectedAudio, setSelectedAudio] = useState(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [loadingResults, setLoadingResults] = useState(false);
+  const [searchMode, setSearchMode] = useState("title"); // New state
 
   useEffect(() => {
     const init = async () => {
@@ -195,201 +200,372 @@ const HomePage = () => {
     console.log("Fetched user details:", userDetails);
   }, [userDetails]);
 
+  const handleSearch = async () => {
+    if (!query.trim()) return;
+    setLoadingResults(true);
+
+    if (searchMode === "title") {
+      // TMDB Title Search (Option 4)
+      const rawResults = await searchTMDb(query);
+
+      if (!Array.isArray(rawResults)) {
+        console.error("TMDB returned invalid data:", rawResults);
+        setResults([]);
+        setLoadingResults(false);
+        return;
+      }
+
+      const enriched = await Promise.all(
+        rawResults.slice(0, 5).map(async (item) => {
+          try {
+            const details = await getDetails(item.media_type, item.id);
+            return { ...item, details };
+          } catch (e) {
+            console.warn("Failed to enrich TMDB item:", item);
+            return null;
+          }
+        })
+      );
+
+      setResults(enriched.filter(Boolean));
+    } else {
+      // Local FAISS Plot Search (Option 3)
+      try {
+        const response = await fetch("http://localhost:8000/search-plot", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ query, top_k: 5 }),
+        });
+
+        const data = await response.json();
+        setResults(data.results || []);
+      } catch (err) {
+        console.error("Plot search failed:", err);
+        setResults([]);
+      }
+    }
+
+    setLoadingResults(false);
+  };
+
   return (
     <div className="homepage-hero-container">
-      <div className="homepage-background-image"></div>
-      <div className="homepage-background-overlay"></div>
+      <div className="homepage-background-image" />
+      <div className="homepage-background-overlay" />
 
-      <div className="homepage-main-content">
-        <BackButton
-          onBackConfirm={async () => {
-            const confirmLogout = window.confirm("Do you want to Logout?");
-            if (confirmLogout) {
-              await supabase.auth.signOut();
-              alert("You have logged out.");
-              navigate("/");
-              return false; // prevent history navigation
-            }
-            return false; // don't navigate back
-          }}
-        />
-
-        <h1 className="homepage-logo">CineMIS AI</h1>
-        <p className="homepage-tagline">Find your Movie with us</p>
-
-        <div className="user-logo-container" onClick={toggleDropdown}>
-          <img
-            src={
-              userDetails?.avatar_url ||
-              user?.user_metadata?.avatar_url ||
-              "src/Images/default-avatar.png"
-            }
-            alt="User Logo"
-            className="user-logo"
+      {/* Hero Section */}
+      <section className="homepage-hero-section">
+        <div className="homepage-main-content">
+          <BackButton
+            onBackConfirm={async () => {
+              const confirmLogout = window.confirm("Do you want to Logout?");
+              if (confirmLogout) {
+                await supabase.auth.signOut();
+                alert("You have logged out.");
+                navigate("/");
+                return false;
+              }
+              return false;
+            }}
           />
 
-          {dropdownVisible && (
-            <div className="dropdown-menu">
-              <p className="dropdown-item">
-                Name: {userDetails?.name || "Loading..."}
-              </p>
-              <p className="dropdown-item">
-                Email: {userDetails?.email || "Loading..."}
-              </p>
-              <button
-                className="dropdown-item logout-btn"
-                onClick={handleLogout}
-              >
-                Logout
-              </button>
-            </div>
-          )}
-        </div>
+          <h1 className="homepage-logo">CineMIS AI</h1>
+          <p className="homepage-tagline">Find your Movie with us</p>
 
-        <div className="homepage-search-container">
-          <input
-            type="text"
-            placeholder="Enter plot details, a dialogue or movie details"
-            className="homepage-search-bar"
-          />
-          <button className="homepage-search-btn">Search</button>
-        </div>
+          <div className="user-logo-container" onClick={toggleDropdown}>
+            <img
+              src={
+                userDetails?.avatar_url ||
+                user?.user_metadata?.avatar_url ||
+                "src/Images/default-avatar.png"
+              }
+              alt="User Logo"
+              className="user-logo"
+            />
 
-        <div className="upload-section">
-          <div className="upload-row">
-            <div
-              className="upload-card dropzone"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const file = e.dataTransfer.files[0];
-                if (file) {
-                  setVideoFile(file);
-                  setSelectedVideo(file);
-                }
-              }}
+            {dropdownVisible && (
+              <div className="dropdown-menu">
+                <p className="dropdown-item">
+                  Name: {userDetails?.name || "Loading..."}
+                </p>
+                <p className="dropdown-item">
+                  Email: {userDetails?.email || "Loading..."}
+                </p>
+                <button
+                  className="dropdown-item logout-btn"
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="search-mode-toggle">
+            <button
+              className={`toggle-btn ${searchMode === "title" ? "active" : ""}`}
+              onClick={() => setSearchMode("title")}
             >
-              <p>📹 Drag & Drop Video</p>
-              <input
-                type="file"
-                accept="video/mp4"
-                onChange={(e) => {
-                  const file = e.target.files[0];
+              🔍 Title Search
+            </button>
+            <button
+              className={`toggle-btn ${searchMode === "plot" ? "active" : ""}`}
+              onClick={() => setSearchMode("plot")}
+            >
+              🧠 Plot Search
+            </button>
+          </div>
+
+          <div className="homepage-search-container">
+            <input
+              type="text"
+              placeholder="Enter plot details, a dialogue or movie details"
+              className="homepage-search-bar"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <button className="homepage-search-btn" onClick={handleSearch}>
+              Search
+            </button>
+          </div>
+
+          <div className="upload-section">
+            {/* VIDEO */}
+            <div className="upload-row">
+              <div
+                className="upload-card dropzone"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files[0];
                   if (file) {
                     setVideoFile(file);
                     setSelectedVideo(file);
                   }
                 }}
-              />
+              >
+                <p>📹 Drag & Drop Video</p>
+                <input
+                  type="file"
+                  accept="video/mp4"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      setVideoFile(file);
+                      setSelectedVideo(file);
+                    }
+                  }}
+                />
+                {selectedVideo && (
+                  <p className="selected-file">{selectedVideo.name}</p>
+                )}
+              </div>
+
               {selectedVideo && (
-                <p className="selected-file">{selectedVideo.name}</p>
+                <>
+                  <button
+                    className="delete-btn-outside"
+                    onClick={() => {
+                      setVideoFile(null);
+                      setSelectedVideo(null);
+                    }}
+                  >
+                    ❌
+                  </button>
+                  <button
+                    className="upload-action-btn-outside"
+                    onClick={() => {
+                      setUploadType("video");
+                      handleFileUpload("video", selectedVideo);
+                      setSelectedVideo(null);
+                    }}
+                    disabled={uploading}
+                  >
+                    {uploading && uploadType === "video"
+                      ? "Uploading..."
+                      : "Upload"}
+                  </button>
+                </>
               )}
             </div>
 
-            {selectedVideo && (
-              <>
-                <button
-                  className="delete-btn-outside"
-                  onClick={() => {
-                    setVideoFile(null);
-                    setSelectedVideo(null);
-                  }}
-                >
-                  ❌
-                </button>
-                <button
-                  className="upload-action-btn-outside"
-                  onClick={() => {
-                    setUploadType("video");
-                    handleFileUpload("video", selectedVideo);
-                    setSelectedVideo(null);
-                  }}
-                  disabled={uploading}
-                >
-                  {uploading && uploadType === "video"
-                    ? "Uploading..."
-                    : "Upload"}
-                </button>
-              </>
+            {uploadType === "video" && uploading && (
+              <progress
+                value={uploadProgress}
+                max="100"
+                className="upload-progress"
+              />
             )}
-          </div>
 
-          {uploadType === "video" && uploading && (
-            <progress
-              value={uploadProgress}
-              max="100"
-              className="upload-progress"
-            />
-          )}
-
-          <div className="upload-row">
-            <div
-              className="upload-card dropzone"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const file = e.dataTransfer.files[0];
-                if (file) {
-                  setAudioFile(file);
-                  setSelectedAudio(file);
-                }
-              }}
-            >
-              <p>🎧 Drag & Drop Audio</p>
-              <input
-                type="file"
-                accept="audio/mp3"
-                onChange={(e) => {
-                  const file = e.target.files[0];
+            {/* AUDIO */}
+            <div className="upload-row">
+              <div
+                className="upload-card dropzone"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files[0];
                   if (file) {
                     setAudioFile(file);
                     setSelectedAudio(file);
                   }
                 }}
-              />
+              >
+                <p>🎧 Drag & Drop Audio</p>
+                <input
+                  type="file"
+                  accept="audio/mp3"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      setAudioFile(file);
+                      setSelectedAudio(file);
+                    }
+                  }}
+                />
+                {selectedAudio && (
+                  <p className="selected-file">{selectedAudio.name}</p>
+                )}
+              </div>
+
               {selectedAudio && (
-                <p className="selected-file">{selectedAudio.name}</p>
+                <>
+                  <button
+                    className="delete-btn-outside"
+                    onClick={() => {
+                      setAudioFile(null);
+                      setSelectedAudio(null);
+                    }}
+                  >
+                    ❌
+                  </button>
+                  <button
+                    className="upload-action-btn-outside"
+                    onClick={() => {
+                      setUploadType("audio");
+                      handleFileUpload("audio", selectedAudio);
+                      setSelectedAudio(null);
+                    }}
+                    disabled={uploading}
+                  >
+                    {uploading && uploadType === "audio"
+                      ? "Uploading..."
+                      : "Upload"}
+                  </button>
+                </>
               )}
             </div>
 
-            {selectedAudio && (
-              <>
-                <button
-                  className="delete-btn-outside"
-                  onClick={() => {
-                    setAudioFile(null);
-                    setSelectedAudio(null);
-                  }}
-                >
-                  ❌
-                </button>
-
-                <button
-                  className="upload-action-btn-outside"
-                  onClick={() => {
-                    setUploadType("audio");
-                    handleFileUpload("audio", selectedAudio);
-                    setSelectedAudio(null);
-                  }}
-                  disabled={uploading}
-                >
-                  {uploading && uploadType === "audio"
-                    ? "Uploading..."
-                    : "Upload"}
-                </button>
-              </>
+            {uploadType === "audio" && uploading && (
+              <progress
+                value={uploadProgress}
+                max="100"
+                className="upload-progress"
+              />
             )}
           </div>
-
-          {uploadType === "audio" && uploading && (
-            <progress
-              value={uploadProgress}
-              max="100"
-              className="upload-progress"
-            />
-          )}
         </div>
-      </div>
+      </section>
+
+      {/* Results Section */}
+      <section className="homepage-results-section">
+        {loadingResults && (
+          <p style={{ color: "white", textAlign: "center" }}>Loading...</p>
+        )}
+
+        {results.length > 0 && (
+          <div className="results-container">
+            {results.map((item, index) => {
+              const isTMDB = !!item.details;
+
+              if (isTMDB) {
+                // TMDB (title) result
+                const info = item.details;
+                const poster = info.poster_path
+                  ? `https://image.tmdb.org/t/p/w300${info.poster_path}`
+                  : "https://image.tmdb.org/t/p/w300_and_h450_bestv2//t/p/w300/no_image_available.jpg";
+
+                const trailer = info.videos?.results?.find(
+                  (v) => v.type === "Trailer"
+                );
+
+                return (
+                  <div key={index} className="result-card">
+                    <img src={poster} alt="poster" />
+                    <div className="result-details">
+                      <h3>{info.title || info.name}</h3>
+                      <p>
+                        <strong>Genres:</strong>{" "}
+                        {info.genres.map((g) => g.name).join(", ")}
+                      </p>
+                      <p>
+                        <strong>Overview:</strong> {info.overview}
+                      </p>
+                      <p>
+                        <strong>Cast:</strong>{" "}
+                        {info.credits?.cast
+                          ?.slice(0, 5)
+                          .map((c) => c.name)
+                          .join(", ")}
+                      </p>
+                      {trailer && (
+                        <a
+                          href={`https://youtube.com/watch?v=${trailer.key}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          ▶️ Watch Trailer
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              } else {
+                // FAISS (plot) result
+                return (
+                  <div key={index} className="result-card">
+                    <img
+                      src={
+                        item.poster ||
+                        "https://image.tmdb.org/t/p/w300_and_h450_bestv2//t/p/w300/no_image_available.jpg"
+                      }
+                      alt="poster"
+                    />
+                    <div className="result-details">
+                      <h3>
+                        {item.title} ({item.year})
+                      </h3>
+                      <p>
+                        <strong>Genres:</strong> {item.genre}
+                      </p>
+                      <p>
+                        <strong>Overview:</strong> {item.overview}
+                      </p>
+                      {item.trailer && (
+                        <a
+                          href={item.trailer}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          ▶️ Watch Trailer
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+            })}
+          </div>
+        )}
+
+        {!loadingResults && results.length === 0 && query && (
+          <p style={{ color: "white", textAlign: "center" }}>
+            No results found for "{query}"
+          </p>
+        )}
+      </section>
     </div>
   );
 };
