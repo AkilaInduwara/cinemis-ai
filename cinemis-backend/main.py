@@ -66,9 +66,12 @@ async def search_plot(payload: PlotQuery):
             "year": item.get("year"),
             "overview": item.get("overview"),
             "genre": item.get("genre"),
+            "poster": item.get("poster"),      # ✅ now included
+            "trailer": item.get("trailer"),    # ✅ now included
             "score": float(dist)
         })
 
     return {"results": results}
+
 
 
