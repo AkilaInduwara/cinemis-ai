@@ -15,7 +15,6 @@ const HomePage = () => {
   const [uploading, setUploading] = useState(false);
   const [uploads, setUploads] = useState([]); // Add this line for uploads state
   const navigate = useNavigate();
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadType, setUploadType] = useState("");
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [selectedAudio, setSelectedAudio] = useState(null);
@@ -26,8 +25,12 @@ const HomePage = () => {
   const [clipTranscript, setClipTranscript] = useState("");
   const [clipModel, setClipModel] = useState("");
   const [clipLoadingUrl, setClipLoadingUrl] = useState(null);
-  const [progressPopupVisible, setProgressPopupVisible] = useState(false);
-  const [uploadingFileName, setUploadingFileName] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0); // Upload progress
+  const [uploadingFileName, setUploadingFileName] = useState(""); // File name for uploading
+  const [progressPopupVisible, setProgressPopupVisible] = useState(false); // Control progress popup visibility
+  const [clipProgress, setClipProgress] = useState(0); // Progress for identifying
+  const [isIdentifying, setIsIdentifying] = useState(false); // Track identifying state
+  const [isIdentifyingCancelled, setIsIdentifyingCancelled] = useState(false); // Cancel identifying state
 
   useEffect(() => {
     const init = async () => {
@@ -106,13 +109,26 @@ const HomePage = () => {
 
   const fetchUploads = async () => {
     if (!user) return;
-    const { data, error } = await supabase
-      .from("media_uploads")
-      .select("*")
-      .eq("user_id", user.id);
 
-    if (error) console.error("Fetch error:", error);
-    else setUploads(data);
+    try {
+      const { data, error } = await supabase
+        .from("media_uploads")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }) // Make sure `created_at` exists
+        .limit(1);
+
+      if (error) {
+        console.error("Fetch error:", error); // This will log any error related to fetching
+        alert("Error fetching uploads: " + error.message);
+      } else {
+        console.log("Fetched uploads:", data); // Log data to verify it works correctly
+        setUploads(data);
+      }
+    } catch (err) {
+      console.error("Error fetching uploads:", err);
+      alert("An error occurred while fetching uploads.");
+    }
   };
 
   const identifyUpload = async (u) => {
@@ -122,26 +138,48 @@ const HomePage = () => {
       setResults([]);
       setClipLoadingUrl(u.file_url);
 
+      setIsIdentifying(true); // Set identifying to true
+      setClipProgress(0); // Reset progress
+      setIsIdentifyingCancelled(false); // Reset cancel flag
+
       const resp = await fetch("http://localhost:8000/identify-from-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: u.file_url, type: u.type, top_k: 5 }),
       });
+
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         throw new Error(err.detail || `Identify failed (${resp.status})`);
       }
+
       const data = await resp.json();
       setClipTranscript(data.transcript || "");
       setClipModel(data.model_used || "");
       setResults(data.results || []);
-      setSearchMode("plot"); // so the results render as FAISS-style cards
+
+      // Simulate progress during identification process
+      const interval = setInterval(() => {
+        setClipProgress((prevProgress) => {
+          const nextProgress = prevProgress + 10;
+          if (nextProgress >= 100) {
+            clearInterval(interval); // Complete progress
+          }
+          return nextProgress;
+        });
+      }, 500);
     } catch (e) {
       console.error(e);
       alert(e.message || "Identify failed");
     } finally {
       setClipLoadingUrl(null);
     }
+  };
+
+  const cancelIdentification = () => {
+    setIsIdentifyingCancelled(true);
+    setIsIdentifying(false);
+    alert("Identification process has been cancelled.");
   };
 
   const handleLogout = async () => {
@@ -177,8 +215,8 @@ const HomePage = () => {
 
     setUploading(true);
     setUploadProgress(0);
-    setProgressPopupVisible(true); // Show the popup when upload starts
-    setUploadingFileName(file.name); // Show the name of the file being uploaded
+    setUploadingFileName(file.name);
+    setProgressPopupVisible(true); // Show the progress popup
 
     const ext = file.name.split(".").pop();
     const filePath = `${type}s/${user.id}/${Date.now()}.${ext}`;
@@ -198,7 +236,7 @@ const HomePage = () => {
       console.error(`${type} upload failed:`, uploadError);
       alert(`${type.toUpperCase()} upload failed.`);
       setUploading(false);
-      setProgressPopupVisible(false); // Hide popup if error
+      setProgressPopupVisible(false); // Hide progress popup
       return;
     }
 
@@ -221,7 +259,7 @@ const HomePage = () => {
       alert("Upload succeeded, but DB insert failed.");
     } else {
       alert(`${type.toUpperCase()} uploaded and saved to database!`);
-      fetchUploads(); // refresh file list
+      fetchUploads(); // Refresh file list
     }
 
     setUploading(false);
@@ -555,6 +593,27 @@ const HomePage = () => {
               )}
             </div>
           )}
+          {isIdentifying && !isIdentifyingCancelled && (
+            <div className="process-progress-popup">
+              <div className="popup-content">
+                <h3>Identifying: {uploadingFileName}</h3>
+                <progress
+                  value={clipProgress}
+                  max="100"
+                  className="process-progress-bar"
+                  style={{ width: "100%", margin: "12px 0" }}
+                ></progress>
+                <p>{clipProgress}%</p>
+                <button
+                  className="cancel-btn"
+                  onClick={cancelIdentification}
+                  disabled={clipProgress >= 100}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -669,7 +728,9 @@ const HomePage = () => {
               className="upload-progress-bar"
               style={{ width: "100%", margin: "12px 0" }}
             ></progress>
-            <p style={{ color: "#fff", fontWeight: "bold" }}>{uploadProgress}%</p>
+            <p style={{ color: "#fff", fontWeight: "bold" }}>
+              {uploadProgress}%
+            </p>
             <p style={{ color: "#ccc", fontSize: "0.95rem" }}>
               Please wait while your file is being uploaded...
             </p>
