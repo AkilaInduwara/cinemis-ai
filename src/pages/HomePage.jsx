@@ -23,6 +23,11 @@ const HomePage = () => {
   const [results, setResults] = useState([]);
   const [loadingResults, setLoadingResults] = useState(false);
   const [searchMode, setSearchMode] = useState("title"); // New state
+  const [clipTranscript, setClipTranscript] = useState("");
+  const [clipModel, setClipModel] = useState("");
+  const [clipLoadingUrl, setClipLoadingUrl] = useState(null);
+  const [progressPopupVisible, setProgressPopupVisible] = useState(false);
+  const [uploadingFileName, setUploadingFileName] = useState("");
 
   useEffect(() => {
     const init = async () => {
@@ -110,6 +115,35 @@ const HomePage = () => {
     else setUploads(data);
   };
 
+  const identifyUpload = async (u) => {
+    try {
+      setClipTranscript("");
+      setClipModel("");
+      setResults([]);
+      setClipLoadingUrl(u.file_url);
+
+      const resp = await fetch("http://localhost:8000/identify-from-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: u.file_url, type: u.type, top_k: 5 }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `Identify failed (${resp.status})`);
+      }
+      const data = await resp.json();
+      setClipTranscript(data.transcript || "");
+      setClipModel(data.model_used || "");
+      setResults(data.results || []);
+      setSearchMode("plot"); // so the results render as FAISS-style cards
+    } catch (e) {
+      console.error(e);
+      alert(e.message || "Identify failed");
+    } finally {
+      setClipLoadingUrl(null);
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     alert("You have logged out.");
@@ -143,6 +177,8 @@ const HomePage = () => {
 
     setUploading(true);
     setUploadProgress(0);
+    setProgressPopupVisible(true); // Show the popup when upload starts
+    setUploadingFileName(file.name); // Show the name of the file being uploaded
 
     const ext = file.name.split(".").pop();
     const filePath = `${type}s/${user.id}/${Date.now()}.${ext}`;
@@ -154,7 +190,7 @@ const HomePage = () => {
           const percent = Math.round(
             (progressEvent.loaded / progressEvent.total) * 100
           );
-          setUploadProgress(percent);
+          setUploadProgress(percent); // Update progress bar
         },
       });
 
@@ -162,6 +198,7 @@ const HomePage = () => {
       console.error(`${type} upload failed:`, uploadError);
       alert(`${type.toUpperCase()} upload failed.`);
       setUploading(false);
+      setProgressPopupVisible(false); // Hide popup if error
       return;
     }
 
@@ -189,6 +226,7 @@ const HomePage = () => {
 
     setUploading(false);
     setUploadProgress(0);
+    setProgressPopupVisible(false); // Hide the popup when upload is complete
   };
 
   // Optionally, fetch uploads when user changes or after upload
@@ -466,6 +504,57 @@ const HomePage = () => {
               />
             )}
           </div>
+          {uploads?.length > 0 && (
+            <div className="uploaded-files">
+              <h3>Your uploads</h3>
+              <ul>
+                {uploads.slice(0, 6).map((u) => (
+                  <li key={u.id || u.file_url}>
+                    <a href={u.file_url} target="_blank" rel="noreferrer">
+                      {u.type.toUpperCase()} — {u.file_url.split("/").pop()}
+                    </a>{" "}
+                    <button
+                      className="upload-action-btn-outside"
+                      onClick={() => identifyUpload(u)}
+                      disabled={!!clipLoadingUrl}
+                      style={{ marginLeft: 8 }}
+                    >
+                      {clipLoadingUrl === u.file_url
+                        ? "Identifying..."
+                        : "Identify"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              {(clipTranscript || clipModel) && (
+                <div
+                  style={{
+                    marginTop: 16,
+                    padding: 12,
+                    background: "rgba(255,255,255,0.06)",
+                    borderRadius: 12,
+                  }}
+                >
+                  <div>
+                    <strong>Model:</strong> {clipModel}
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <strong>Transcript:</strong>
+                    <div
+                      style={{
+                        marginTop: 6,
+                        whiteSpace: "pre-wrap",
+                        color: "#ddd",
+                      }}
+                    >
+                      {clipTranscript}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
@@ -566,6 +655,27 @@ const HomePage = () => {
           </p>
         )}
       </section>
+
+      {progressPopupVisible && (
+        <div className="upload-progress-popup">
+          <div className="popup-content">
+            <h3>
+              Uploading:{" "}
+              <span style={{ color: "#00e0b8" }}>{uploadingFileName}</span>
+            </h3>
+            <progress
+              value={uploadProgress}
+              max="100"
+              className="upload-progress-bar"
+              style={{ width: "100%", margin: "12px 0" }}
+            ></progress>
+            <p style={{ color: "#fff", fontWeight: "bold" }}>{uploadProgress}%</p>
+            <p style={{ color: "#ccc", fontSize: "0.95rem" }}>
+              Please wait while your file is being uploaded...
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
