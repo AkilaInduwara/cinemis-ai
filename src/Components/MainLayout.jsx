@@ -1,190 +1,119 @@
-import React, { useState, useEffect } from "react";
+// src/Components/MainLayout.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Outlet } from "react-router-dom";
 import "../css/MainLayout.css";
-import { supabase } from "../supabaseClient";
 
-// Preload one image and resolve if it loads, reject if it fails
-const preloadImage = (url) =>
+const ROTATE_MS = 6000; // change slide every 6s
+
+// Vite will import all matching files as URLs at build time
+const modules = import.meta.glob(
+  "/src/Images/backgrounds/*.{jpg,jpeg,png,webp,avif}",
+  { eager: true, import: "default", query: "?url" }
+);
+
+const backgroundUrls = Object.values(modules);
+
+const preload = (url) =>
   new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(url);
-    img.onerror = () => reject(url);
-    // Adding a cache-busting query helps avoid stale CDN versions
-    img.src = `${url}?v=${Date.now()}`;
+    img.decoding = "async";
+    img.onload = resolve;
+    img.onerror = reject;
+    img.src = url;
   });
 
-// HEAD-check a URL so we can detect 404s quickly without downloading image bytes
-const headCheck = async (url) => {
-  try {
-    const res = await fetch(`${url}?v=${Date.now()}`, {
-      method: "HEAD",
-      cache: "no-store",
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-};
+export default function MainLayout() {
+  const [ready, setReady] = useState(false);
+  const [showA, setShowA] = useState(true);
+  const [urlA, setUrlA] = useState(null);
+  const [urlB, setUrlB] = useState(null);
+  const indexRef = useRef(0);
+  const timerRef = useRef(null);
 
-const CACHE_KEY = "backgroundImages_v2"; // bump key to avoid old cache
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
-
-const MainLayout = () => {
-  const [backgroundImages, setBackgroundImages] = useState([]); // raw URLs
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  // Load from cache if fresh
-  const loadImagesFromCache = () => {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (!cached) return null;
-    try {
-      const parsed = JSON.parse(cached); // { ts, urls, names }
-      if (
-        parsed &&
-        Array.isArray(parsed.urls) &&
-        parsed.urls.length > 0 &&
-        typeof parsed.ts === "number" &&
-        Date.now() - parsed.ts < CACHE_TTL_MS
-      ) {
-        return parsed;
-      }
-    } catch {}
-    return null;
-  };
-
-  const fetchFromSupabase = async () => {
-    const { data: files, error } = await supabase.storage
-      .from("backgrounds")
-      .list("", { limit: 100 });
-    if (error) {
-      console.error("Failed to fetch background images:", error.message);
-      return { urls: [], names: [] };
+  // shuffle once so you don’t always start with the same image
+  const urls = useMemo(() => {
+    const arr = [...backgroundUrls];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
     }
+    return arr;
+  }, []);
 
-    const items = files || [];
-    const names = items.map((f) => f.name);
-    const urls = items
-      .map((file) => {
-        const { data } = supabase.storage.from("backgrounds").getPublicUrl(file.name);
-        return data?.publicUrl || null;
-      })
-      .filter(Boolean);
-
-    return { urls, names };
-  };
-
-  // Reconcile cached list with bucket list (remove URLs for deleted files)
-  const reconcileCache = (cached, namesFromBucket) => {
-    if (!cached || !Array.isArray(cached.urls)) return cached;
-    // If cached had names list, use it to filter; otherwise keep all (best-effort)
-    if (Array.isArray(cached.names) && cached.names.length) {
-      const allowedSet = new Set(namesFromBucket);
-      const filteredUrls = cached.urls.filter((url) => {
-        // try to get file name from the end of url path
-        try {
-          const u = new URL(url);
-          const name = decodeURIComponent(u.pathname.split("/").pop() || "");
-          return allowedSet.has(name);
-        } catch {
-          return true;
-        }
-      });
-      return { ...cached, urls: filteredUrls };
-    }
-    return cached;
-  };
-
-  // Validate URLs by HEAD + preload (filters out stale CDN / deleted assets)
-  const validateUrls = async (urls) => {
-    const checked = await Promise.all(
-      urls.map(async (u) => (await headCheck(u)) ? u : null)
-    );
-    const existing = checked.filter(Boolean);
-
-    // Preload images (optional but nice to avoid flicker)
-    const results = await Promise.allSettled(existing.map((u) => preloadImage(u)));
-    const ok = results
-      .map((r, i) => (r.status === "fulfilled" ? existing[i] : null))
-      .filter(Boolean);
-
-    return ok;
-  };
-
+  // initial load of first two images
   useEffect(() => {
     let cancelled = false;
+    if (urls.length === 0) {
+      setReady(true);
+      return;
+    }
 
-    const init = async () => {
-      setLoading(true);
+    (async () => {
+      try {
+        await preload(urls[0]);
+        if (cancelled) return;
+        setUrlA(urls[0]);
 
-      // 1) try cache
-      let cached = loadImagesFromCache();
-
-      // 2) always fetch latest file list to reconcile (so deleted files drop out)
-      const { urls: freshUrls, names: freshNames } = await fetchFromSupabase();
-
-      if (cached) {
-        cached = reconcileCache(cached, freshNames);
-        // combine: prefer freshUrls order; keep only those present
-        const freshSet = new Set(freshUrls);
-        const merged = cached.urls.filter((u) => freshSet.has(u));
-        // plus any new ones not in cache yet
-        const newOnes = freshUrls.filter((u) => !merged.includes(u));
-        const candidate = [...merged, ...newOnes];
-
-        const valid = await validateUrls(candidate);
-        if (!cancelled) {
-          setBackgroundImages(valid);
-          localStorage.setItem(
-            CACHE_KEY,
-            JSON.stringify({ ts: Date.now(), urls: valid, names: freshNames })
-          );
+        if (urls.length > 1) {
+          await preload(urls[1]);
+          if (cancelled) return;
+          setUrlB(urls[1]);
         }
-      } else {
-        // no cache: use fresh list
-        const valid = await validateUrls(freshUrls);
-        if (!cancelled) {
-          setBackgroundImages(valid);
-          localStorage.setItem(
-            CACHE_KEY,
-            JSON.stringify({ ts: Date.now(), urls: valid, names: freshNames })
-          );
-        }
+
+        setReady(true);
+        indexRef.current = 1; // prepared 0 and 1
+      } catch {
+        setReady(true);
       }
+    })();
 
-      if (!cancelled) setLoading(false);
-    };
-
-    init();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [urls]);
 
-  // Rotate
+  // rotate with crossfade
   useEffect(() => {
-    if (backgroundImages.length === 0) return;
-    const id = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % backgroundImages.length);
-    }, 5000);
-    return () => clearInterval(id);
-  }, [backgroundImages]);
+    if (!ready || urls.length < 2) return;
 
-  const currentBg =
-    backgroundImages.length > 0
-      ? `url(${backgroundImages[currentIndex]}?v=${Date.now()})`
-      : "none";
+    clearInterval(timerRef.current);
+    timerRef.current = setInterval(async () => {
+      const nextIndex = (indexRef.current + 1) % urls.length;
+      const nextUrl = urls[nextIndex];
+
+      try { await preload(nextUrl); } catch {}
+
+      if (showA) {
+        setUrlB(nextUrl);
+        setShowA(false);
+      } else {
+        setUrlA(nextUrl);
+        setShowA(true);
+      }
+      indexRef.current = nextIndex;
+    }, ROTATE_MS);
+
+    return () => clearInterval(timerRef.current);
+  }, [ready, urls, showA]);
 
   return (
     <div className="mainlayout-container">
-      {loading && <div className="loading-overlay">Loading...</div>}
-      <div className="mainlayout-background-image" style={{ backgroundImage: currentBg }} />
+      {!ready && <div className="loading-overlay">Loading...</div>}
+
+      <div
+        className={`bg-layer layer-a ${showA ? "visible" : ""}`}
+        style={urlA ? { backgroundImage: `url(${urlA})` } : {}}
+      />
+      <div
+        className={`bg-layer layer-b ${!showA ? "visible" : ""}`}
+        style={urlB ? { backgroundImage: `url(${urlB})` } : {}}
+      />
+
       <div className="mainlayout-background-overlay"></div>
+
       <div className="mainlayout-content">
         <Outlet />
       </div>
     </div>
   );
-};
-
-export default MainLayout;
+}
