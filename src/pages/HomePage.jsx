@@ -243,13 +243,27 @@ const HomePage = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (type === "video" && file.size > 50 * 1024 * 1024) {
-      alert("Video too large. Max 50MB.");
+    // Check for video file type only for video upload section
+    if (type === "video" && !file.type.startsWith("video/")) {
+      alert("Please upload a valid video file.");
       return;
     }
 
-    if (type === "audio" && file.size > 10 * 1024 * 1024) {
-      alert("Audio too large. Max 10MB.");
+    // Check for audio file type only for audio upload section
+    if (type === "audio" && !file.type.startsWith("audio/")) {
+      alert("Please upload a valid audio file.");
+      return;
+    }
+
+    // Video size limit: 20MB
+    if (type === "video" && file.size > 20 * 1024 * 1024) {
+      alert("Video too large. Max 20MB.");
+      return;
+    }
+
+    // Audio size limit: 5MB
+    if (type === "audio" && file.size > 5 * 1024 * 1024) {
+      alert("Audio too large. Max 5MB.");
       return;
     }
 
@@ -503,7 +517,7 @@ const HomePage = () => {
           <div className="homepage-search-container">
             <input
               type="text"
-              placeholder="Enter plot details, a dialogue or movie details"
+              placeholder="Enter plot details or a Title"
               className="homepage-search-bar"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
