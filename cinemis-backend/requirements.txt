@@ -8,3 +8,6 @@ uvicorn
 python-dotenv
 fastapi-cors
 requests
+faster-whisper
+python-multipart
+ffmpeg-python

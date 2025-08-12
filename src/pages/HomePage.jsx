@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/HomePage.css";
 import BackButton from "../Components/BackButton";
@@ -15,7 +15,6 @@ const HomePage = () => {
   const [uploading, setUploading] = useState(false);
   const [uploads, setUploads] = useState([]); // Add this line for uploads state
   const navigate = useNavigate();
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadType, setUploadType] = useState("");
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [selectedAudio, setSelectedAudio] = useState(null);
@@ -23,6 +22,17 @@ const HomePage = () => {
   const [results, setResults] = useState([]);
   const [loadingResults, setLoadingResults] = useState(false);
   const [searchMode, setSearchMode] = useState("title"); // New state
+  const [clipTranscript, setClipTranscript] = useState("");
+  const [clipModel, setClipModel] = useState("");
+  const [clipLoadingUrl, setClipLoadingUrl] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0); // Upload progress
+  const [uploadingFileName, setUploadingFileName] = useState(""); // File name for uploading
+  const [progressPopupVisible, setProgressPopupVisible] = useState(false); // Control progress popup visibility
+  const [clipProgress, setClipProgress] = useState(0); // Progress for identifying
+  const [isIdentifying, setIsIdentifying] = useState(false); // Track identifying state
+  const [isIdentifyingCancelled, setIsIdentifyingCancelled] = useState(false); // Cancel identifying state
+  const identifyIntervalRef = useRef(null); // NEW: holds progress interval id
+  const identifyAbortRef = useRef(null); // NEW: holds AbortController
 
   useEffect(() => {
     const init = async () => {
@@ -101,14 +111,127 @@ const HomePage = () => {
 
   const fetchUploads = async () => {
     if (!user) return;
-    const { data, error } = await supabase
-      .from("media_uploads")
-      .select("*")
-      .eq("user_id", user.id);
 
-    if (error) console.error("Fetch error:", error);
-    else setUploads(data);
+    try {
+      const { data, error } = await supabase
+        .from("media_uploads")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }) // Make sure `created_at` exists
+        .limit(1);
+
+      if (error) {
+        console.error("Fetch error:", error); // This will log any error related to fetching
+        alert("Error fetching uploads: " + error.message);
+      } else {
+        console.log("Fetched uploads:", data); // Log data to verify it works correctly
+        setUploads(data);
+      }
+    } catch (err) {
+      console.error("Error fetching uploads:", err);
+      alert("An error occurred while fetching uploads.");
+    }
   };
+
+  const identifyUpload = async (u) => {
+    // derive a display name from URL for the popup title
+    const nameFromUrl = (u?.file_url || "").split("/").pop() || "clip";
+    // reset UI
+    setClipTranscript("");
+    setClipModel("");
+    setResults([]);
+    setClipLoadingUrl(u.file_url);
+    setUploadingFileName(nameFromUrl);
+
+    // set up identifying state
+    setIsIdentifying(true);
+    setIsIdentifyingCancelled(false);
+    setClipProgress(0);
+
+    // progress ticker: climb slowly to 95% while waiting on backend
+    if (identifyIntervalRef.current) {
+      clearInterval(identifyIntervalRef.current);
+    }
+    identifyIntervalRef.current = setInterval(() => {
+      setClipProgress((p) => (p < 95 ? p + 1 : 95));
+    }, 120); // ~12s to reach 95%
+
+    // abort controller (for cancel)
+    const controller = new AbortController();
+    identifyAbortRef.current = controller;
+
+    try {
+      const resp = await fetch("http://localhost:8000/identify-from-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: u.file_url, type: u.type, top_k: 5 }),
+        signal: controller.signal, // <- allow cancel
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `Identify failed (${resp.status})`);
+      }
+
+      const data = await resp.json();
+      setClipTranscript(data.transcript || "");
+      setClipModel(data.model_used || "");
+      setResults(data.results || []);
+
+      // Log to console instead of displaying
+      console.log("Model used:", data.model_used);
+      console.log("Transcript:", data.transcript);
+
+      // jump to 100% to trigger auto-close
+      setClipProgress(100);
+    } catch (e) {
+      if (e.name === "AbortError") {
+        // cancelled by user
+        console.warn("Identification aborted by user");
+      } else {
+        console.error(e);
+        alert(e.message || "Identify failed");
+      }
+      // ensure popup closes on error/cancel
+      setClipProgress(100);
+    } finally {
+      setClipLoadingUrl(null);
+      if (identifyIntervalRef.current) {
+        clearInterval(identifyIntervalRef.current);
+        identifyIntervalRef.current = null;
+      }
+    }
+  };
+
+  const cancelIdentification = () => {
+    setIsIdentifyingCancelled(true);
+    if (identifyAbortRef.current) {
+      try {
+        identifyAbortRef.current.abort();
+      } catch {}
+    }
+    if (identifyIntervalRef.current) {
+      clearInterval(identifyIntervalRef.current);
+      identifyIntervalRef.current = null;
+    }
+    // Set to 100 so the auto-close effect runs
+    setClipProgress(100);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (identifyIntervalRef.current) {
+        clearInterval(identifyIntervalRef.current);
+        identifyIntervalRef.current = null;
+      }
+      if (identifyAbortRef.current) {
+        try {
+          identifyAbortRef.current.abort();
+        } catch {}
+        identifyAbortRef.current = null;
+      }
+    };
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -124,13 +247,27 @@ const HomePage = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (type === "video" && file.size > 50 * 1024 * 1024) {
-      alert("Video too large. Max 50MB.");
+    // Check for video file type only for video upload section
+    if (type === "video" && !file.type.startsWith("video/")) {
+      alert("Please upload a valid video file.");
       return;
     }
 
-    if (type === "audio" && file.size > 10 * 1024 * 1024) {
-      alert("Audio too large. Max 10MB.");
+    // Check for audio file type only for audio upload section
+    if (type === "audio" && !file.type.startsWith("audio/")) {
+      alert("Please upload a valid audio file.");
+      return;
+    }
+
+    // Video size limit: 20MB
+    if (type === "video" && file.size > 20 * 1024 * 1024) {
+      alert("Video too large. Max 20MB.");
+      return;
+    }
+
+    // Audio size limit: 5MB
+    if (type === "audio" && file.size > 5 * 1024 * 1024) {
+      alert("Audio too large. Max 5MB.");
       return;
     }
 
@@ -143,6 +280,8 @@ const HomePage = () => {
 
     setUploading(true);
     setUploadProgress(0);
+    setUploadingFileName(file.name);
+    setProgressPopupVisible(true); // Show the progress popup
 
     const ext = file.name.split(".").pop();
     const filePath = `${type}s/${user.id}/${Date.now()}.${ext}`;
@@ -154,7 +293,7 @@ const HomePage = () => {
           const percent = Math.round(
             (progressEvent.loaded / progressEvent.total) * 100
           );
-          setUploadProgress(percent);
+          setUploadProgress(percent); // Update progress bar
         },
       });
 
@@ -162,6 +301,7 @@ const HomePage = () => {
       console.error(`${type} upload failed:`, uploadError);
       alert(`${type.toUpperCase()} upload failed.`);
       setUploading(false);
+      setProgressPopupVisible(false); // Hide progress popup
       return;
     }
 
@@ -184,11 +324,12 @@ const HomePage = () => {
       alert("Upload succeeded, but DB insert failed.");
     } else {
       alert(`${type.toUpperCase()} uploaded and saved to database!`);
-      fetchUploads(); // refresh file list
+      fetchUploads(); // Refresh file list
     }
 
     setUploading(false);
     setUploadProgress(0);
+    setProgressPopupVisible(false); // Hide the popup when upload is complete
   };
 
   // Optionally, fetch uploads when user changes or after upload
@@ -248,6 +389,85 @@ const HomePage = () => {
     }
 
     setLoadingResults(false);
+  };
+
+  // NEW: auto-close identifying popup once progress reaches 100
+  useEffect(() => {
+    if (isIdentifying && clipProgress >= 100) {
+      // small delay so user sees 100%
+      const t = setTimeout(() => {
+        setIsIdentifying(false);
+        setIsIdentifyingCancelled(false);
+        // cleanup
+        if (identifyIntervalRef.current) {
+          clearInterval(identifyIntervalRef.current);
+          identifyIntervalRef.current = null;
+        }
+        identifyAbortRef.current = null;
+      }, 600);
+      return () => clearTimeout(t);
+    }
+  }, [isIdentifying, clipProgress]);
+
+  // clears UI only (not DB)
+  const clearAll = () => {
+    // stop any in-flight identify
+    if (identifyAbortRef.current) {
+      try {
+        identifyAbortRef.current.abort();
+      } catch {}
+      identifyAbortRef.current = null;
+    }
+    if (identifyIntervalRef.current) {
+      clearInterval(identifyIntervalRef.current);
+      identifyIntervalRef.current = null;
+    }
+
+    // reset states
+    setIsIdentifying(false);
+    setIsIdentifyingCancelled(false);
+    setClipProgress(0);
+    setProgressPopupVisible(false);
+
+    setQuery("");
+    setSearchMode("title"); // back to default mode
+    setResults([]);
+    setClipTranscript("");
+    setClipModel("");
+    setClipLoadingUrl(null);
+    setUploadingFileName("");
+    setUploadType("");
+    setUploadProgress(0);
+
+    // clear local selections & on-page “recent uploads” list
+    setSelectedVideo(null);
+    setSelectedAudio(null);
+    setVideoFile(null);
+    setAudioFile(null);
+    setUploads([]); // UI-only; does not touch DB
+
+    // optional: scroll to top
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleClearUpload = (type) => {
+    if (type === "video") {
+      setVideoFile(null); // Reset the video file
+      setSelectedVideo(null); // Reset the selected video file
+    } else {
+      setAudioFile(null); // Reset the audio file
+      setSelectedAudio(null); // Reset the selected audio file
+    }
+    setUploads([]); // Reset recent uploads list
+  };
+
+  const handleIdentifyUpload = (u) => {
+    // Existing identify logic
+    identifyUpload(u);
+
+    // Once identify is triggered, hide the clear button
+    setSelectedVideo(null);
+    setSelectedAudio(null);
   };
 
   return (
@@ -321,7 +541,7 @@ const HomePage = () => {
           <div className="homepage-search-container">
             <input
               type="text"
-              placeholder="Enter plot details, a dialogue or movie details"
+              placeholder="Enter plot details or a Title"
               className="homepage-search-bar"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -466,11 +686,92 @@ const HomePage = () => {
               />
             )}
           </div>
+
+          {(videoFile || audioFile) && (
+            <div className="uploaded-files">
+              <h3>Your uploads</h3>
+              <ul>
+                {uploads.slice(0, 6).map((u) => (
+                  <li key={u.id || u.file_url}>
+                    <a href={u.file_url} target="_blank" rel="noreferrer">
+                      {u.type.toUpperCase()} — {u.file_url.split("/").pop()}
+                    </a>{" "}
+                    <button
+                      className="upload-action-btn-outside"
+                      onClick={() => identifyUpload(u)}
+                      disabled={!!clipLoadingUrl}
+                      style={{ marginLeft: 8 }}
+                    >
+                      {clipLoadingUrl === u.file_url
+                        ? "Identifying..."
+                        : "Identify"}
+                    </button>
+                    <button
+                      className="clear-btn"
+                      onClick={() => handleClearUpload(u.type)}
+                      style={{ marginLeft: 8 }}
+                    >
+                      Clear
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {isIdentifying && !isIdentifyingCancelled && (
+            <div className="process-progress-popup">
+              <div className="popup-content">
+                <h3>Identifying: {uploadingFileName}</h3>
+                <progress
+                  value={clipProgress}
+                  max="100"
+                  className="process-progress-bar"
+                  style={{ width: "100%", margin: "12px 0" }}
+                ></progress>
+                <p>{clipProgress}%</p>
+                <button
+                  className="cancel-btn"
+                  onClick={cancelIdentification}
+                  disabled={clipProgress >= 100}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
       {/* Results Section */}
+
       <section className="homepage-results-section">
+        {(results.length > 0 ||
+          !!clipTranscript ||
+          !!clipModel ||
+          !!clipLoadingUrl ||
+          loadingResults) && (
+          <div
+            style={{
+              maxWidth: 1000,
+              margin: "0 auto 16px",
+              padding: "0 20px",
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <button className="upload-action-btn-outside" onClick={clearAll}>
+              Clear results
+            </button>
+          </div>
+        )}
+
+        {loadingResults && (
+          <p style={{ color: "white", textAlign: "center" }}>Loading...</p>
+        )}
+        {loadingResults && (
+          <p style={{ color: "white", textAlign: "center" }}>Loading...</p>
+        )}
         {loadingResults && (
           <p style={{ color: "white", textAlign: "center" }}>Loading...</p>
         )}
@@ -566,6 +867,29 @@ const HomePage = () => {
           </p>
         )}
       </section>
+
+      {progressPopupVisible && (
+        <div className="upload-progress-popup">
+          <div className="popup-content">
+            <h3>
+              Uploading:{" "}
+              <span style={{ color: "#00e0b8" }}>{uploadingFileName}</span>
+            </h3>
+            <progress
+              value={uploadProgress}
+              max="100"
+              className="upload-progress-bar"
+              style={{ width: "100%", margin: "12px 0" }}
+            ></progress>
+            <p style={{ color: "#fff", fontWeight: "bold" }}>
+              {uploadProgress}%
+            </p>
+            <p style={{ color: "#ccc", fontSize: "0.95rem" }}>
+              Please wait while your file is being uploaded...
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

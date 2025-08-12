@@ -1,25 +1,33 @@
-// src/Components/BackendTest.jsx
 import React, { useEffect, useState } from "react";
 
 const BackendTest = () => {
-  const [status, setStatus] = useState("Checking...");
+  const [backendStatus, setBackendStatus] = useState("Checking...");
+  const [ffmpegStatus, setFfmpegStatus] = useState("Checking...");
 
   useEffect(() => {
+    // Backend ping
     fetch("http://localhost:8000/ping")
       .then((res) => res.json())
+      .then((data) => setBackendStatus("✅ Connected: " + data.message))
+      .catch(() => setBackendStatus("❌ Failed to connect"));
+
+    // FFmpeg check
+    fetch("http://localhost:8000/ffmpeg-check")
+      .then((res) => res.json())
       .then((data) => {
-        console.log("Backend Response:", data);
-        setStatus("✅ Connected: " + data.message);
+        if (data.ok) {
+          setFfmpegStatus("✅ " + data.version);
+        } else {
+          setFfmpegStatus("❌ " + (data.error || "FFmpeg not available"));
+        }
       })
-      .catch((err) => {
-        console.error("Backend connection failed", err);
-        setStatus("❌ Failed to connect");
-      });
+      .catch(() => setFfmpegStatus("❌ Failed to check FFmpeg"));
   }, []);
 
   return (
-    <div style={{ marginTop: "20px", color: "white", textAlign: "center" }}>
-      <h3>Backend Status: {status}</h3>
+    <div style={{ marginTop: 20, color: "white", textAlign: "center" }}>
+      <h3>Backend Status: {backendStatus}</h3>
+      <h3>FFmpeg Status: {ffmpegStatus}</h3>
     </div>
   );
 };
