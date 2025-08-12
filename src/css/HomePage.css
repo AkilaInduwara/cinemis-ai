@@ -347,6 +347,7 @@ body {
   transition: 0.3s ease;
   font-weight: 600;
   box-shadow: 0 6px 15px rgba(0, 201, 167, 0.3);
+  z-index: 1000; /* Ensure it's above all other content */
 }
 
 .upload-action-btn-outside:hover {

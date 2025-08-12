@@ -391,6 +391,47 @@ const HomePage = () => {
     }
   }, [isIdentifying, clipProgress]);
 
+  // clears UI only (not DB)
+  const clearAll = () => {
+    // stop any in-flight identify
+    if (identifyAbortRef.current) {
+      try {
+        identifyAbortRef.current.abort();
+      } catch {}
+      identifyAbortRef.current = null;
+    }
+    if (identifyIntervalRef.current) {
+      clearInterval(identifyIntervalRef.current);
+      identifyIntervalRef.current = null;
+    }
+
+    // reset states
+    setIsIdentifying(false);
+    setIsIdentifyingCancelled(false);
+    setClipProgress(0);
+    setProgressPopupVisible(false);
+
+    setQuery("");
+    setSearchMode("title"); // back to default mode
+    setResults([]);
+    setClipTranscript("");
+    setClipModel("");
+    setClipLoadingUrl(null);
+    setUploadingFileName("");
+    setUploadType("");
+    setUploadProgress(0);
+
+    // clear local selections & on-page “recent uploads” list
+    setSelectedVideo(null);
+    setSelectedAudio(null);
+    setVideoFile(null);
+    setAudioFile(null);
+    setUploads([]); // UI-only; does not touch DB
+
+    // optional: scroll to top
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
     <div className="homepage-hero-container">
       <div className="homepage-background-image" />
@@ -607,7 +648,8 @@ const HomePage = () => {
               />
             )}
           </div>
-          {uploads?.length > 0 && (
+
+          {(videoFile || audioFile) && (
             <div className="uploaded-files">
               <h3>Your uploads</h3>
               <ul>
@@ -658,6 +700,7 @@ const HomePage = () => {
               )}
             </div>
           )}
+
           {isIdentifying && !isIdentifyingCancelled && (
             <div className="process-progress-popup">
               <div className="popup-content">
@@ -683,7 +726,34 @@ const HomePage = () => {
       </section>
 
       {/* Results Section */}
+
       <section className="homepage-results-section">
+        {(results.length > 0 ||
+          !!clipTranscript ||
+          !!clipModel ||
+          !!clipLoadingUrl ||
+          loadingResults) && (
+          <div
+            style={{
+              maxWidth: 1000,
+              margin: "0 auto 16px",
+              padding: "0 20px",
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <button className="upload-action-btn-outside" onClick={clearAll}>
+              Clear results
+            </button>
+          </div>
+        )}
+
+        {loadingResults && (
+          <p style={{ color: "white", textAlign: "center" }}>Loading...</p>
+        )}
+        {loadingResults && (
+          <p style={{ color: "white", textAlign: "center" }}>Loading...</p>
+        )}
         {loadingResults && (
           <p style={{ color: "white", textAlign: "center" }}>Loading...</p>
         )}
