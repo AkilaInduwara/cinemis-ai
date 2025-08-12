@@ -178,6 +178,10 @@ const HomePage = () => {
       setClipModel(data.model_used || "");
       setResults(data.results || []);
 
+      // Log to console instead of displaying
+      console.log("Model used:", data.model_used);
+      console.log("Transcript:", data.transcript);
+
       // jump to 100% to trigger auto-close
       setClipProgress(100);
     } catch (e) {
@@ -712,33 +716,6 @@ const HomePage = () => {
                   </li>
                 ))}
               </ul>
-
-              {(clipTranscript || clipModel) && (
-                <div
-                  style={{
-                    marginTop: 16,
-                    padding: 12,
-                    background: "rgba(255,255,255,0.06)",
-                    borderRadius: 12,
-                  }}
-                >
-                  <div>
-                    <strong>Model:</strong> {clipModel}
-                  </div>
-                  <div style={{ marginTop: 8 }}>
-                    <strong>Transcript:</strong>
-                    <div
-                      style={{
-                        marginTop: 6,
-                        whiteSpace: "pre-wrap",
-                        color: "#ddd",
-                      }}
-                    >
-                      {clipTranscript}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
