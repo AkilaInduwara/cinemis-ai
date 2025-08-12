@@ -536,7 +536,6 @@ body {
   transition: width 0.2s ease-in-out;
 }
 
-
 .cancel-btn {
   padding: 8px 20px;
   background: red;
@@ -596,6 +595,24 @@ body {
   transition: width 0.2s ease-in-out;
 }
 
+.clear-btn {
+  padding: 8px 16px;
+  background: #ff4f4f;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.clear-btn:hover {
+  background: #ff2e2e;
+}
+
+.clear-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 @media (max-width: 768px) {
   .homepage-logo {

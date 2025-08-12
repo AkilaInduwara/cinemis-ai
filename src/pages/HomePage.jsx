@@ -446,6 +446,26 @@ const HomePage = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleClearUpload = (type) => {
+    if (type === "video") {
+      setVideoFile(null); // Reset the video file
+      setSelectedVideo(null); // Reset the selected video file
+    } else {
+      setAudioFile(null); // Reset the audio file
+      setSelectedAudio(null); // Reset the selected audio file
+    }
+    setUploads([]); // Reset recent uploads list
+  };
+
+  const handleIdentifyUpload = (u) => {
+    // Existing identify logic
+    identifyUpload(u);
+
+    // Once identify is triggered, hide the clear button
+    setSelectedVideo(null);
+    setSelectedAudio(null);
+  };
+
   return (
     <div className="homepage-hero-container">
       <div className="homepage-background-image" />
@@ -681,6 +701,13 @@ const HomePage = () => {
                       {clipLoadingUrl === u.file_url
                         ? "Identifying..."
                         : "Identify"}
+                    </button>
+                    <button
+                      className="clear-btn"
+                      onClick={() => handleClearUpload(u.type)}
+                      style={{ marginLeft: 8 }}
+                    >
+                      Clear
                     </button>
                   </li>
                 ))}
