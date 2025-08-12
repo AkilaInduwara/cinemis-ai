@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/HomePage.css";
 import BackButton from "../Components/BackButton";
@@ -31,6 +31,8 @@ const HomePage = () => {
   const [clipProgress, setClipProgress] = useState(0); // Progress for identifying
   const [isIdentifying, setIsIdentifying] = useState(false); // Track identifying state
   const [isIdentifyingCancelled, setIsIdentifyingCancelled] = useState(false); // Cancel identifying state
+  const identifyIntervalRef = useRef(null); // NEW: holds progress interval id
+  const identifyAbortRef = useRef(null); // NEW: holds AbortController
 
   useEffect(() => {
     const init = async () => {
@@ -132,20 +134,38 @@ const HomePage = () => {
   };
 
   const identifyUpload = async (u) => {
+    // derive a display name from URL for the popup title
+    const nameFromUrl = (u?.file_url || "").split("/").pop() || "clip";
+    // reset UI
+    setClipTranscript("");
+    setClipModel("");
+    setResults([]);
+    setClipLoadingUrl(u.file_url);
+    setUploadingFileName(nameFromUrl);
+
+    // set up identifying state
+    setIsIdentifying(true);
+    setIsIdentifyingCancelled(false);
+    setClipProgress(0);
+
+    // progress ticker: climb slowly to 95% while waiting on backend
+    if (identifyIntervalRef.current) {
+      clearInterval(identifyIntervalRef.current);
+    }
+    identifyIntervalRef.current = setInterval(() => {
+      setClipProgress((p) => (p < 95 ? p + 1 : 95));
+    }, 120); // ~12s to reach 95%
+
+    // abort controller (for cancel)
+    const controller = new AbortController();
+    identifyAbortRef.current = controller;
+
     try {
-      setClipTranscript("");
-      setClipModel("");
-      setResults([]);
-      setClipLoadingUrl(u.file_url);
-
-      setIsIdentifying(true); // Set identifying to true
-      setClipProgress(0); // Reset progress
-      setIsIdentifyingCancelled(false); // Reset cancel flag
-
       const resp = await fetch("http://localhost:8000/identify-from-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: u.file_url, type: u.type, top_k: 5 }),
+        signal: controller.signal, // <- allow cancel
       });
 
       if (!resp.ok) {
@@ -158,29 +178,56 @@ const HomePage = () => {
       setClipModel(data.model_used || "");
       setResults(data.results || []);
 
-      // Simulate progress during identification process
-      const interval = setInterval(() => {
-        setClipProgress((prevProgress) => {
-          const nextProgress = prevProgress + 10;
-          if (nextProgress >= 100) {
-            clearInterval(interval); // Complete progress
-          }
-          return nextProgress;
-        });
-      }, 500);
+      // jump to 100% to trigger auto-close
+      setClipProgress(100);
     } catch (e) {
-      console.error(e);
-      alert(e.message || "Identify failed");
+      if (e.name === "AbortError") {
+        // cancelled by user
+        console.warn("Identification aborted by user");
+      } else {
+        console.error(e);
+        alert(e.message || "Identify failed");
+      }
+      // ensure popup closes on error/cancel
+      setClipProgress(100);
     } finally {
       setClipLoadingUrl(null);
+      if (identifyIntervalRef.current) {
+        clearInterval(identifyIntervalRef.current);
+        identifyIntervalRef.current = null;
+      }
     }
   };
 
   const cancelIdentification = () => {
     setIsIdentifyingCancelled(true);
-    setIsIdentifying(false);
-    alert("Identification process has been cancelled.");
+    if (identifyAbortRef.current) {
+      try {
+        identifyAbortRef.current.abort();
+      } catch {}
+    }
+    if (identifyIntervalRef.current) {
+      clearInterval(identifyIntervalRef.current);
+      identifyIntervalRef.current = null;
+    }
+    // Set to 100 so the auto-close effect runs
+    setClipProgress(100);
   };
+
+  useEffect(() => {
+    return () => {
+      if (identifyIntervalRef.current) {
+        clearInterval(identifyIntervalRef.current);
+        identifyIntervalRef.current = null;
+      }
+      if (identifyAbortRef.current) {
+        try {
+          identifyAbortRef.current.abort();
+        } catch {}
+        identifyAbortRef.current = null;
+      }
+    };
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -325,6 +372,24 @@ const HomePage = () => {
 
     setLoadingResults(false);
   };
+
+  // NEW: auto-close identifying popup once progress reaches 100
+  useEffect(() => {
+    if (isIdentifying && clipProgress >= 100) {
+      // small delay so user sees 100%
+      const t = setTimeout(() => {
+        setIsIdentifying(false);
+        setIsIdentifyingCancelled(false);
+        // cleanup
+        if (identifyIntervalRef.current) {
+          clearInterval(identifyIntervalRef.current);
+          identifyIntervalRef.current = null;
+        }
+        identifyAbortRef.current = null;
+      }, 600);
+      return () => clearTimeout(t);
+    }
+  }, [isIdentifying, clipProgress]);
 
   return (
     <div className="homepage-hero-container">
