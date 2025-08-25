@@ -1,10 +1,11 @@
 # sub_matcher.py
 from pathlib import Path
-import re, pickle, faiss
+import os, re, pickle, faiss
 from typing import Dict, Any, List
 from sentence_transformers import SentenceTransformer
 
-DATA_DIR   = Path("data/subs_index")
+BASE_DIR  = Path(__file__).resolve().parent
+DATA_DIR  = Path(os.getenv("SUBS_INDEX_DIR", BASE_DIR / "data" / "subs_index")).resolve()
 FAISS_PATH = DATA_DIR / "subs_index.faiss"
 META_PATH  = DATA_DIR / "subs_index_meta.pkl"
 
