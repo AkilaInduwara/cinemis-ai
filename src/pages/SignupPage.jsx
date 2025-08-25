@@ -131,12 +131,7 @@ const handleSocialSignup = async (provider) => {
             >
               Sign up with Google
             </button>
-            <button
-              className="signuppage-social-btn"
-              onClick={() => handleSocialSignup("facebook")}
-            >
-              Sign up with Facebook
-            </button>
+            
           </div>
         </div>
       </div>

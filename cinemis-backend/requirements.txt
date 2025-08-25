@@ -11,3 +11,9 @@ requests
 faster-whisper
 python-multipart
 ffmpeg-python
+sentence-transformers==2.*
+faiss-cpu
+srt
+rapidfuzz==3.* 
+kaggle==1.7.4.5
+numpy

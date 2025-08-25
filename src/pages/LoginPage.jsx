@@ -60,7 +60,7 @@ const handleSocialLogin = async (provider) => {
 
           <div className="loginpage-social-signin">
             <button className="loginpage-social-btn" onClick={() => handleSocialLogin('google')}>Sign in with Google</button>
-            <button className="loginpage-social-btn" onClick={() => handleSocialLogin('facebook')}>Sign in with Facebook</button>
+            
           </div>
         </div>
       </div>
