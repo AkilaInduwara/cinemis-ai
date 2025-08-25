@@ -14,7 +14,7 @@ const HomePage = () => {
   const [videoFile, setVideoFile] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [uploads, setUploads] = useState([]); // Add this line for uploads state
+  const [uploads, setUploads] = useState([]);
   const navigate = useNavigate();
   const [uploadType, setUploadType] = useState("");
   const [selectedVideo, setSelectedVideo] = useState(null);
@@ -24,21 +24,24 @@ const HomePage = () => {
   const [rawOverview, setRawOverview] = useState([]);       // overview-only hits
   const [rawSubtitles, setRawSubtitles] = useState([]);     // subtitle-only hits
   const [loadingResults, setLoadingResults] = useState(false);
-  const [searchMode, setSearchMode] = useState("title"); // New state
+  const [searchMode, setSearchMode] = useState("title");
 
-  // keep in state (for dev) but DO NOT render on page
+  // keep in state (dev) but DO NOT render
   const [clipTranscript, setClipTranscript] = useState("");
   const [clipModel, setClipModel] = useState("");
 
   const [clipLoadingUrl, setClipLoadingUrl] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0); // Upload progress
-  const [uploadingFileName, setUploadingFileName] = useState(""); // File name for uploading
-  const [progressPopupVisible, setProgressPopupVisible] = useState(false); // Control progress popup visibility
-  const [clipProgress, setClipProgress] = useState(0); // Progress for identifying
-  const [isIdentifying, setIsIdentifying] = useState(false); // Track identifying state
-  const [isIdentifyingCancelled, setIsIdentifyingCancelled] = useState(false); // Cancel identifying state
-  const identifyIntervalRef = useRef(null); // NEW: holds progress interval id
-  const identifyAbortRef = useRef(null); // NEW: holds AbortController
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingFileName, setUploadingFileName] = useState("");
+  const [progressPopupVisible, setProgressPopupVisible] = useState(false);
+  const [clipProgress, setClipProgress] = useState(0);
+  const [isIdentifying, setIsIdentifying] = useState(false);
+  const [isIdentifyingCancelled, setIsIdentifyingCancelled] = useState(false);
+  const identifyIntervalRef = useRef(null);
+  const identifyAbortRef = useRef(null);
+
+  // NEW: gate for showing "Your uploads" only right after an upload
+  const [showRecentUploads, setShowRecentUploads] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -151,13 +154,12 @@ const HomePage = () => {
     setIsIdentifyingCancelled(false);
     setClipProgress(0);
 
-    // progress ticker: climb slowly to 95% while waiting on backend
     if (identifyIntervalRef.current) {
       clearInterval(identifyIntervalRef.current);
     }
     identifyIntervalRef.current = setInterval(() => {
       setClipProgress((p) => (p < 95 ? p + 1 : 95));
-    }, 120); // ~12s to reach 95%
+    }, 120);
 
     // abort controller (for cancel)
     const controller = new AbortController();
@@ -188,7 +190,6 @@ const HomePage = () => {
 
       const data = await resp.json();
 
-      // DEBUG LOGS — backend returned fields
       console.log("[Identify] Success payload keys:", Object.keys(data));
       console.log("[Identify] ASR model:", data.model_used);
       console.log("[Identify] Transcript (first 300 chars):", (data.transcript || "").slice(0, 300));
@@ -200,18 +201,26 @@ const HomePage = () => {
       setClipTranscript(data.transcript || "");
       setClipModel(data.model_used || "");
 
-      // show results on page
       setResults(data.fused_top || data.results || []);
-      setRawOverview(Array.isArray(data.tmdb_overview_results) ? data.tmdb_overview_results : []);
-      setRawSubtitles(Array.isArray(data.subtitle_candidates) ? data.subtitle_candidates : []);
+      setRawOverview(
+        Array.isArray(data.tmdb_overview_results)
+          ? data.tmdb_overview_results
+          : []
+      );
+      setRawSubtitles(
+        Array.isArray(data.subtitle_candidates)
+          ? data.subtitle_candidates
+          : []
+      );
 
-      // pretty tables for quick inspection
       if (Array.isArray(data.fused_top)) {
         console.log("[Identify] Fused top:");
         console.table(
           data.fused_top.map((r) => ({
             title: r.details ? (r.details.title || r.details.name) : r.title,
-            year: r.details ? (r.details.release_date || r.details.first_air_date || "") : r.year,
+            year: r.details
+              ? r.details.release_date || r.details.first_air_date || ""
+              : r.year,
             source: r.details ? "TMDB" : "Overview FAISS",
             score: typeof r.score !== "undefined" ? r.score : "",
           }))
@@ -230,7 +239,6 @@ const HomePage = () => {
         );
       }
 
-      // jump to 100% to trigger auto-close
       setClipProgress(100);
     } catch (e) {
       if (e.name === "AbortError") {
@@ -365,7 +373,8 @@ const HomePage = () => {
       alert("Upload succeeded, but DB insert failed.");
     } else {
       alert(`${type.toUpperCase()} uploaded and saved to database!`);
-      fetchUploads();
+      await fetchUploads();             // refresh latest
+      setShowRecentUploads(true);       // <-- show recent uploads ONLY now
     }
 
     setUploading(false);
@@ -489,6 +498,8 @@ const HomePage = () => {
     setAudioFile(null);
     setUploads([]);
 
+    setShowRecentUploads(false); // <-- hide recent uploads again
+
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -501,12 +512,14 @@ const HomePage = () => {
       setSelectedAudio(null);
     }
     setUploads([]);
+    setShowRecentUploads(false); // <-- hide once user clears
   };
 
   const handleIdentifyUpload = (u) => {
     identifyUpload(u);
     setSelectedVideo(null);
     setSelectedAudio(null);
+    // (optional) keep recent uploads visible until user clears/refreshes
   };
 
   return (
@@ -726,7 +739,8 @@ const HomePage = () => {
             )}
           </div>
 
-          {(videoFile || audioFile) && (
+          {/* Show ONLY after a successful upload */}
+          {showRecentUploads && uploads.length > 0 && (
             <div className="uploaded-files">
               <h3>Your uploads</h3>
               <ul>
@@ -737,7 +751,7 @@ const HomePage = () => {
                     </a>{" "}
                     <button
                       className="upload-action-btn-outside"
-                      onClick={() => identifyUpload(u)}
+                      onClick={() => handleIdentifyUpload(u)}
                       disabled={!!clipLoadingUrl}
                       style={{ marginLeft: 8 }}
                     >
@@ -818,7 +832,7 @@ const HomePage = () => {
         {results.length > 0 && (
           <div className="results-container">
             <h2 style={{ color: "#fff", textAlign: "left", margin: "10px 0 14px" }}>
-              Top Matches (Fused)
+              Top Matches
             </h2>
             {results.map((item, index) => {
               const isTMDB = !!item.details;
@@ -905,7 +919,7 @@ const HomePage = () => {
         {rawOverview.length > 0 && (
           <div className="results-container">
             <h2 style={{ color: "#fff", textAlign: "left", margin: "24px 0 14px" }}>
-              Overview Engine (TMDB)
+              Other Results
             </h2>
             {rawOverview.map((item, index) => {
               const isTMDB = !!item.details;
@@ -988,12 +1002,10 @@ const HomePage = () => {
           </div>
         )}
 
-        {/* Subtitle Engine — raw (OpenSubtitles) */}
+        {/* Subtitle Engine — raw */}
         {rawSubtitles.length > 0 && (
           <div className="results-container">
-            <h2 style={{ color: "#fff", textAlign: "left", margin: "24px 0 14px" }}>
-              Subtitle Engine (OpenSubtitles)
-            </h2>
+            
             {rawSubtitles.map((s, i) => (
               <div key={`subs_${i}`} className="result-card">
                 <img
