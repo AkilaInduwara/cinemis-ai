@@ -27,3 +27,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+
+backend/data/
+*.faiss
+*.pkl
+*.db
+*.jsonl
+*.txt
+*.tsv
+data/

@@ -1,3 +1,4 @@
+// HomePage.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/HomePage.css";
@@ -19,11 +20,16 @@ const HomePage = () => {
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [selectedAudio, setSelectedAudio] = useState(null);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState([]);               // fused top (combined)
+  const [rawOverview, setRawOverview] = useState([]);       // overview-only hits
+  const [rawSubtitles, setRawSubtitles] = useState([]);     // subtitle-only hits
   const [loadingResults, setLoadingResults] = useState(false);
   const [searchMode, setSearchMode] = useState("title"); // New state
+
+  // keep in state (for dev) but DO NOT render on page
   const [clipTranscript, setClipTranscript] = useState("");
   const [clipModel, setClipModel] = useState("");
+
   const [clipLoadingUrl, setClipLoadingUrl] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0); // Upload progress
   const [uploadingFileName, setUploadingFileName] = useState(""); // File name for uploading
@@ -40,12 +46,12 @@ const HomePage = () => {
         data: { session },
         error,
       } = await supabase.auth.getSession();
-      console.log("Session:", session); // ✅ debug
-      console.log("Error:", error); // ✅ debug
+      console.log("[Auth] Session:", session);
+      console.log("[Auth] Error:", error);
 
       if (session?.user) {
         setUser(session.user);
-        console.log("User metadata:", session.user.user_metadata); // ✅ Add this
+        console.log("[Auth] User metadata:", session.user.user_metadata);
         fetchUserDetails(session.user.id);
       }
 
@@ -65,10 +71,8 @@ const HomePage = () => {
   }, []);
 
   const fetchUserDetails = async (userId) => {
-    // Early return if user is not set yet
     if (!userId) return;
 
-    // Fetch from your custom users table
     let { data, error } = await supabase
       .from("users")
       .select("*")
@@ -78,7 +82,6 @@ const HomePage = () => {
     if (data) {
       setUserDetails(data);
     } else if (!data && !error) {
-      // only insert if data is null AND there's no error
       const currentUser = await supabase.auth.getUser();
       const userMeta = currentUser?.data?.user?.user_metadata || {};
       const name = userMeta?.name || userMeta?.full_name || "Anonymous";
@@ -100,12 +103,12 @@ const HomePage = () => {
         .single();
 
       if (insertError) {
-        console.error("Error inserting new user:", insertError);
+        console.error("[DB] Insert user failed:", insertError.message);
       } else {
         setUserDetails(insertData);
       }
     } else {
-      console.error("Error fetching user:", error);
+      console.error("[DB] Fetch user error:", error);
     }
   };
 
@@ -117,29 +120,29 @@ const HomePage = () => {
         .from("media_uploads")
         .select("*")
         .eq("user_id", user.id)
-        .order("created_at", { ascending: false }) // Make sure `created_at` exists
+        .order("created_at", { ascending: false })
         .limit(1);
 
       if (error) {
-        console.error("Fetch error:", error); // This will log any error related to fetching
+        console.error("[DB] Fetch uploads error:", error);
         alert("Error fetching uploads: " + error.message);
       } else {
-        console.log("Fetched uploads:", data); // Log data to verify it works correctly
+        console.log("[DB] Fetched uploads:", data);
         setUploads(data);
       }
     } catch (err) {
-      console.error("Error fetching uploads:", err);
+      console.error("[DB] Fetch uploads exception:", err);
       alert("An error occurred while fetching uploads.");
     }
   };
 
   const identifyUpload = async (u) => {
-    // derive a display name from URL for the popup title
     const nameFromUrl = (u?.file_url || "").split("/").pop() || "clip";
-    // reset UI
-    setClipTranscript("");
-    setClipModel("");
+
+    // reset UI state (results on page)
     setResults([]);
+    setRawOverview([]);
+    setRawSubtitles([]);
     setClipLoadingUrl(u.file_url);
     setUploadingFileName(nameFromUrl);
 
@@ -160,39 +163,82 @@ const HomePage = () => {
     const controller = new AbortController();
     identifyAbortRef.current = controller;
 
+    // DEBUG LOGS — outbound request
+    console.log("[Identify] Starting identification:");
+    console.log("  • URL:", u.file_url);
+    console.log("  • Type:", u.type);
+    console.log("  • Endpoint:", "http://localhost:8000/identify-from-url");
+    console.log("  • Body:", { url: u.file_url, type: u.type, top_k: 5 });
+
     try {
       const resp = await fetch("http://localhost:8000/identify-from-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: u.file_url, type: u.type, top_k: 5 }),
-        signal: controller.signal, // <- allow cancel
+        signal: controller.signal,
       });
+
+      console.log("[Identify] Response status:", resp.status);
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
+        console.error("[Identify] Error payload:", err);
         throw new Error(err.detail || `Identify failed (${resp.status})`);
       }
 
       const data = await resp.json();
+
+      // DEBUG LOGS — backend returned fields
+      console.log("[Identify] Success payload keys:", Object.keys(data));
+      console.log("[Identify] ASR model:", data.model_used);
+      console.log("[Identify] Transcript (first 300 chars):", (data.transcript || "").slice(0, 300));
+      console.log("[Identify] Fused results length:", Array.isArray(data.fused_top) ? data.fused_top.length : 0);
+      console.log("[Identify] TMDB overview results length:", Array.isArray(data.tmdb_overview_results) ? data.tmdb_overview_results.length : 0);
+      console.log("[Identify] Subtitle candidates length:", Array.isArray(data.subtitle_candidates) ? data.subtitle_candidates.length : 0);
+
+      // Keep transcript & model ONLY IN CONSOLE (still store in state for dev)
       setClipTranscript(data.transcript || "");
       setClipModel(data.model_used || "");
-      setResults(data.results || []);
 
-      // Log to console instead of displaying
-      console.log("Model used:", data.model_used);
-      console.log("Transcript:", data.transcript);
+      // show results on page
+      setResults(data.fused_top || data.results || []);
+      setRawOverview(Array.isArray(data.tmdb_overview_results) ? data.tmdb_overview_results : []);
+      setRawSubtitles(Array.isArray(data.subtitle_candidates) ? data.subtitle_candidates : []);
+
+      // pretty tables for quick inspection
+      if (Array.isArray(data.fused_top)) {
+        console.log("[Identify] Fused top:");
+        console.table(
+          data.fused_top.map((r) => ({
+            title: r.details ? (r.details.title || r.details.name) : r.title,
+            year: r.details ? (r.details.release_date || r.details.first_air_date || "") : r.year,
+            source: r.details ? "TMDB" : "Overview FAISS",
+            score: typeof r.score !== "undefined" ? r.score : "",
+          }))
+        );
+      }
+      if (Array.isArray(data.subtitle_candidates)) {
+        console.log("[Identify] Subtitle candidates (first 10):");
+        console.table(
+          data.subtitle_candidates.slice(0, 10).map((s) => ({
+            title: s.title || s.title_guess || "Unknown",
+            season: s.season ?? "",
+            episode: s.episode ?? "",
+            year: s.year || s.year_guess || "",
+            score: s.score ?? "",
+          }))
+        );
+      }
 
       // jump to 100% to trigger auto-close
       setClipProgress(100);
     } catch (e) {
       if (e.name === "AbortError") {
-        // cancelled by user
-        console.warn("Identification aborted by user");
+        console.warn("[Identify] Aborted by user");
       } else {
-        console.error(e);
+        console.error("[Identify] Exception:", e);
         alert(e.message || "Identify failed");
       }
-      // ensure popup closes on error/cancel
       setClipProgress(100);
     } finally {
       setClipLoadingUrl(null);
@@ -214,7 +260,6 @@ const HomePage = () => {
       clearInterval(identifyIntervalRef.current);
       identifyIntervalRef.current = null;
     }
-    // Set to 100 so the auto-close effect runs
     setClipProgress(100);
   };
 
@@ -247,25 +292,21 @@ const HomePage = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Check for video file type only for video upload section
     if (type === "video" && !file.type.startsWith("video/")) {
       alert("Please upload a valid video file.");
       return;
     }
 
-    // Check for audio file type only for audio upload section
     if (type === "audio" && !file.type.startsWith("audio/")) {
       alert("Please upload a valid audio file.");
       return;
     }
 
-    // Video size limit: 20MB
     if (type === "video" && file.size > 20 * 1024 * 1024) {
       alert("Video too large. Max 20MB.");
       return;
     }
 
-    // Audio size limit: 5MB
     if (type === "audio" && file.size > 5 * 1024 * 1024) {
       alert("Audio too large. Max 5MB.");
       return;
@@ -281,7 +322,7 @@ const HomePage = () => {
     setUploading(true);
     setUploadProgress(0);
     setUploadingFileName(file.name);
-    setProgressPopupVisible(true); // Show the progress popup
+    setProgressPopupVisible(true);
 
     const ext = file.name.split(".").pop();
     const filePath = `${type}s/${user.id}/${Date.now()}.${ext}`;
@@ -293,15 +334,15 @@ const HomePage = () => {
           const percent = Math.round(
             (progressEvent.loaded / progressEvent.total) * 100
           );
-          setUploadProgress(percent); // Update progress bar
+          setUploadProgress(percent);
         },
       });
 
     if (uploadError) {
-      console.error(`${type} upload failed:`, uploadError);
+      console.error(`[Upload] ${type} upload failed:`, uploadError);
       alert(`${type.toUpperCase()} upload failed.`);
       setUploading(false);
-      setProgressPopupVisible(false); // Hide progress popup
+      setProgressPopupVisible(false);
       return;
     }
 
@@ -320,37 +361,37 @@ const HomePage = () => {
     ]);
 
     if (dbError) {
-      console.error("DB insert error:", dbError);
+      console.error("[DB] Insert media_uploads error:", dbError);
       alert("Upload succeeded, but DB insert failed.");
     } else {
       alert(`${type.toUpperCase()} uploaded and saved to database!`);
-      fetchUploads(); // Refresh file list
+      fetchUploads();
     }
 
     setUploading(false);
     setUploadProgress(0);
-    setProgressPopupVisible(false); // Hide the popup when upload is complete
+    setProgressPopupVisible(false);
   };
 
-  // Optionally, fetch uploads when user changes or after upload
   useEffect(() => {
     if (user) fetchUploads();
   }, [user]);
 
   useEffect(() => {
-    console.log("Fetched user details:", userDetails);
+    console.log("[DB] User details:", userDetails);
   }, [userDetails]);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
     setLoadingResults(true);
 
+    console.log("[Search] Mode:", searchMode, "| Query:", query);
+
     if (searchMode === "title") {
-      // TMDB Title Search (Option 4)
       const rawResults = await searchTMDb(query);
 
       if (!Array.isArray(rawResults)) {
-        console.error("TMDB returned invalid data:", rawResults);
+        console.error("[Search] TMDB returned invalid data:", rawResults);
         setResults([]);
         setLoadingResults(false);
         return;
@@ -362,15 +403,17 @@ const HomePage = () => {
             const details = await getDetails(item.media_type, item.id);
             return { ...item, details };
           } catch (e) {
-            console.warn("Failed to enrich TMDB item:", item);
+            console.warn("[Search] Failed to enrich TMDB item:", item);
             return null;
           }
         })
       );
 
       setResults(enriched.filter(Boolean));
+      setRawOverview([]);
+      setRawSubtitles([]);
+      console.log("[Search] TMDB results:", enriched.filter(Boolean));
     } else {
-      // Local FAISS Plot Search (Option 3)
       try {
         const response = await fetch("http://localhost:8000/search-plot", {
           method: "POST",
@@ -382,23 +425,25 @@ const HomePage = () => {
 
         const data = await response.json();
         setResults(data.results || []);
+        setRawOverview([]);
+        setRawSubtitles([]);
+        console.log("[Search] Local FAISS results:", data.results || []);
       } catch (err) {
-        console.error("Plot search failed:", err);
+        console.error("[Search] Plot search failed:", err);
         setResults([]);
+        setRawOverview([]);
+        setRawSubtitles([]);
       }
     }
 
     setLoadingResults(false);
   };
 
-  // NEW: auto-close identifying popup once progress reaches 100
   useEffect(() => {
     if (isIdentifying && clipProgress >= 100) {
-      // small delay so user sees 100%
       const t = setTimeout(() => {
         setIsIdentifying(false);
         setIsIdentifyingCancelled(false);
-        // cleanup
         if (identifyIntervalRef.current) {
           clearInterval(identifyIntervalRef.current);
           identifyIntervalRef.current = null;
@@ -409,9 +454,7 @@ const HomePage = () => {
     }
   }, [isIdentifying, clipProgress]);
 
-  // clears UI only (not DB)
   const clearAll = () => {
-    // stop any in-flight identify
     if (identifyAbortRef.current) {
       try {
         identifyAbortRef.current.abort();
@@ -423,15 +466,16 @@ const HomePage = () => {
       identifyIntervalRef.current = null;
     }
 
-    // reset states
     setIsIdentifying(false);
     setIsIdentifyingCancelled(false);
     setClipProgress(0);
     setProgressPopupVisible(false);
 
     setQuery("");
-    setSearchMode("title"); // back to default mode
+    setSearchMode("title");
     setResults([]);
+    setRawOverview([]);
+    setRawSubtitles([]);
     setClipTranscript("");
     setClipModel("");
     setClipLoadingUrl(null);
@@ -439,33 +483,28 @@ const HomePage = () => {
     setUploadType("");
     setUploadProgress(0);
 
-    // clear local selections & on-page “recent uploads” list
     setSelectedVideo(null);
     setSelectedAudio(null);
     setVideoFile(null);
     setAudioFile(null);
-    setUploads([]); // UI-only; does not touch DB
+    setUploads([]);
 
-    // optional: scroll to top
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleClearUpload = (type) => {
     if (type === "video") {
-      setVideoFile(null); // Reset the video file
-      setSelectedVideo(null); // Reset the selected video file
+      setVideoFile(null);
+      setSelectedVideo(null);
     } else {
-      setAudioFile(null); // Reset the audio file
-      setSelectedAudio(null); // Reset the selected audio file
+      setAudioFile(null);
+      setSelectedAudio(null);
     }
-    setUploads([]); // Reset recent uploads list
+    setUploads([]);
   };
 
   const handleIdentifyUpload = (u) => {
-    // Existing identify logic
     identifyUpload(u);
-
-    // Once identify is triggered, hide the clear button
     setSelectedVideo(null);
     setSelectedAudio(null);
   };
@@ -744,11 +783,10 @@ const HomePage = () => {
       </section>
 
       {/* Results Section */}
-
       <section className="homepage-results-section">
         {(results.length > 0 ||
-          !!clipTranscript ||
-          !!clipModel ||
+          rawOverview.length > 0 ||
+          rawSubtitles.length > 0 ||
           !!clipLoadingUrl ||
           loadingResults) && (
           <div
@@ -776,13 +814,16 @@ const HomePage = () => {
           <p style={{ color: "white", textAlign: "center" }}>Loading...</p>
         )}
 
+        {/* Fused Results */}
         {results.length > 0 && (
           <div className="results-container">
+            <h2 style={{ color: "#fff", textAlign: "left", margin: "10px 0 14px" }}>
+              Top Matches (Fused)
+            </h2>
             {results.map((item, index) => {
               const isTMDB = !!item.details;
 
               if (isTMDB) {
-                // TMDB (title) result
                 const info = item.details;
                 const poster = info.poster_path
                   ? `https://image.tmdb.org/t/p/w300${info.poster_path}`
@@ -824,7 +865,6 @@ const HomePage = () => {
                   </div>
                 );
               } else {
-                // FAISS (plot) result
                 return (
                   <div key={index} className="result-card">
                     <img
@@ -861,11 +901,137 @@ const HomePage = () => {
           </div>
         )}
 
-        {!loadingResults && results.length === 0 && query && (
-          <p style={{ color: "white", textAlign: "center" }}>
-            No results found for "{query}"
-          </p>
+        {/* Overview Engine (TMDB) — raw */}
+        {rawOverview.length > 0 && (
+          <div className="results-container">
+            <h2 style={{ color: "#fff", textAlign: "left", margin: "24px 0 14px" }}>
+              Overview Engine (TMDB)
+            </h2>
+            {rawOverview.map((item, index) => {
+              const isTMDB = !!item.details;
+
+              if (isTMDB) {
+                const info = item.details;
+                const poster = info.poster_path
+                  ? `https://image.tmdb.org/t/p/w300${info.poster_path}`
+                  : "https://image.tmdb.org/t/p/w300_and_h450_bestv2//t/p/w300/no_image_available.jpg";
+
+                const trailer = info.videos?.results?.find(
+                  (v) => v.type === "Trailer"
+                );
+
+                return (
+                  <div key={`ov_${index}`} className="result-card">
+                    <img src={poster} alt="poster" />
+                    <div className="result-details">
+                      <h3>{info.title || info.name}</h3>
+                      <p>
+                        <strong>Genres:</strong>{" "}
+                        {info.genres.map((g) => g.name).join(", ")}
+                      </p>
+                      <p>
+                        <strong>Overview:</strong> {info.overview}
+                      </p>
+                      <p>
+                        <strong>Cast:</strong>{" "}
+                        {info.credits?.cast
+                          ?.slice(0, 5)
+                          .map((c) => c.name)
+                          .join(", ")}
+                      </p>
+                      {trailer && (
+                        <a
+                          href={`https://youtube.com/watch?v=${trailer.key}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          ▶️ Watch Trailer
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              } else {
+                return (
+                  <div key={`ov_${index}`} className="result-card">
+                    <img
+                      src={
+                        item.poster ||
+                        "https://image.tmdb.org/t/p/w300_and_h450_bestv2//t/p/w300/no_image_available.jpg"
+                      }
+                      alt="poster"
+                    />
+                    <div className="result-details">
+                      <h3>
+                        {item.title} ({item.year})
+                      </h3>
+                      <p>
+                        <strong>Genres:</strong> {item.genre}
+                      </p>
+                      <p>
+                        <strong>Overview:</strong> {item.overview}
+                      </p>
+                      {item.trailer && (
+                        <a
+                          href={item.trailer}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          ▶️ Watch Trailer
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+            })}
+          </div>
         )}
+
+        {/* Subtitle Engine — raw (OpenSubtitles) */}
+        {rawSubtitles.length > 0 && (
+          <div className="results-container">
+            <h2 style={{ color: "#fff", textAlign: "left", margin: "24px 0 14px" }}>
+              Subtitle Engine (OpenSubtitles)
+            </h2>
+            {rawSubtitles.map((s, i) => (
+              <div key={`subs_${i}`} className="result-card">
+                <img
+                  src="https://via.placeholder.com/180x270?text=Subtitles"
+                  alt="subtitle"
+                />
+                <div className="result-details">
+                  <h3>
+                    {(s.title || s.title_guess || "Unknown Title")}
+                    {s.season && s.episode
+                      ? ` (S${String(s.season).padStart(2, "0")}E${String(s.episode).padStart(2, "0")})`
+                      : ""}
+                  </h3>
+                  <p><strong>Year:</strong> {s.year || s.year_guess || "—"}</p>
+                  {typeof s.score !== "undefined" && (
+                    <p><strong>Score:</strong> {Number(s.score).toFixed ? Number(s.score).toFixed(4) : s.score}</p>
+                  )}
+                  {(s.source || s.inner_name) && (
+                    <p>
+                      <strong>Source:</strong> {s.source || "—"}{s.inner_name ? ` → ${s.inner_name}` : ""}
+                    </p>
+                  )}
+                  {s.snippet && <p>{s.snippet}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!loadingResults &&
+          results.length === 0 &&
+          rawOverview.length === 0 &&
+          rawSubtitles.length === 0 &&
+          query && (
+            <p style={{ color: "white", textAlign: "center" }}>
+              No results found for "{query}"
+            </p>
+          )}
       </section>
 
       {progressPopupVisible && (
