@@ -4,7 +4,7 @@ from pathlib import Path
 from collections import defaultdict, deque
 import argparse, re, json, pickle, os, gc, sys, hashlib
 from typing import Iterator, Tuple, Dict, Any, List, Set
-
+import os
 import faiss
 import numpy as np
 from tqdm import tqdm
@@ -15,7 +15,7 @@ PROJECT   = Path(__file__).resolve().parent
 TXT_PATH  = PROJECT / "data" / "opus_hf" / "opensubtitles_en.txt"
 TSV_PATH  = PROJECT / "data" / "opus_hf" / "opensubtitles_en_meta.tsv"
 
-OUT_DIR    = PROJECT / "data" / "subs_index"
+OUT_DIR    = Path(os.getenv("SUBS_INDEX_DIR", PROJECT / "data" / "subs_index")).resolve()
 FAISS_PATH = OUT_DIR / "subs_index.faiss"
 META_JL    = OUT_DIR / "meta_shards"
 CFG_PATH   = OUT_DIR / "subs_index_config.json"
