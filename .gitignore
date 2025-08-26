@@ -30,8 +30,6 @@ dist-ssr
 
 
 backend/data/
-*.faiss
-*.pkl
 *.db
 *.jsonl
 *.txt
