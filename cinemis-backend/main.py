@@ -1,4 +1,3 @@
-# main.py
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,11 +7,11 @@ import faiss, pickle, numpy as np
 import os, tempfile, subprocess, requests
 from typing import Tuple, Dict, Any, List
 
-# ---- NEW: subtitle matching + tmdb enricher ----
+# ---- subtitle matching + tmdb enricher ----
 from sub_matcher import SubtitleMatcher
 from tmdb_enrich import TMDBEnricher
 
-# Load FAISS index and metadata (TMDB overview index)
+# Load FAISS index and metadata 
 index = faiss.read_index("movie_index.faiss")
 with open("metadata.pkl", "rb") as f:
     metadata = pickle.load(f)
@@ -145,7 +144,7 @@ def transcribe_wav(wav_path: str, model_size: str) -> str:
     segments, _ = asr.transcribe(wav_path, beam_size=1)
     return " ".join([s.text.strip() for s in segments if s.text.strip()])
 
-# ---- NEW: subtitle-only matcher endpoint ----
+# ---- subtitle-only matcher endpoint ----
 class SubMatchPayload(BaseModel):
     transcript: str
     top_k_per_window: int = 5
@@ -155,7 +154,7 @@ def match_subtitles(payload: SubMatchPayload):
     if sub_matcher is None:
         raise HTTPException(status_code=503, detail="Subtitle index not ready")
     out = sub_matcher.search(payload.transcript, payload.top_k_per_window)
-    # try enrich top 20 with TMDB posters/trailers
+   
     enriched = []
     if tmdb_enricher:
         for c in out["candidates"][:20]:

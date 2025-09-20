@@ -73,6 +73,8 @@ const HomePage = () => {
     init();
   }, []);
 
+
+  //Fetch user details from Supabase
   const fetchUserDetails = async (userId) => {
     if (!userId) return;
 
@@ -115,6 +117,8 @@ const HomePage = () => {
     }
   };
 
+  
+                    //Fetch uploaded media
   const fetchUploads = async () => {
     if (!user) return;
 
@@ -172,6 +176,8 @@ const HomePage = () => {
     console.log("  • Endpoint:", "http://localhost:8000/identify-from-url");
     console.log("  • Body:", { url: u.file_url, type: u.type, top_k: 5 });
 
+
+              //Clip identification backend endpoint
     try {
       const resp = await fetch("http://localhost:8000/identify-from-url", {
         method: "POST",
@@ -299,7 +305,11 @@ const HomePage = () => {
   const handleFileChange = (e, type) => {
     const file = e.target.files[0];
     if (!file) return;
-
+        
+    
+    
+    
+    // Handle file type and size validations
     if (type === "video" && !file.type.startsWith("video/")) {
       alert("Please upload a valid video file.");
       return;
@@ -390,12 +400,18 @@ const HomePage = () => {
     console.log("[DB] User details:", userDetails);
   }, [userDetails]);
 
+  
+  
+  //Search button handler
+  
   const handleSearch = async () => {
     if (!query.trim()) return;
     setLoadingResults(true);
 
     console.log("[Search] Mode:", searchMode, "| Query:", query);
 
+
+        //TMDb API fetch
     if (searchMode === "title") {
       const rawResults = await searchTMDb(query);
 
@@ -418,6 +434,8 @@ const HomePage = () => {
         })
       );
 
+
+        //Plot search backend endpoint:
       setResults(enriched.filter(Boolean));
       setRawOverview([]);
       setRawSubtitles([]);
