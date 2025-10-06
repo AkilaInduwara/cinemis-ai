@@ -26,7 +26,7 @@ const HomePage = () => {
   const [loadingResults, setLoadingResults] = useState(false);
   const [searchMode, setSearchMode] = useState("title");
 
-  // keep in state (dev) but DO NOT render
+
   const [clipTranscript, setClipTranscript] = useState("");
   const [clipModel, setClipModel] = useState("");
 
